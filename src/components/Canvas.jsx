@@ -6,7 +6,7 @@ const Canvas = () => {
     const canvas2DRef = useRef(null);
     const canvas3DRef = useRef(null);
     const [profile, setProfile] = useState([]);
-    const [slices, setSlices] = useState(100);
+    const [slices, setSlices] = useState(30);
     const [transform, setTransform] = useState({ translate: { x: 0, y: 0, z: 0 }, rotate: { x: 0, y: 0, z: 0 }, scale: 1 });
 
   const handle2DCanvasClick = (e) => {
@@ -63,6 +63,7 @@ const Canvas = () => {
     const model = generateVertices(profile, slices);
 
     // Full orthographic projection
+    /* DRAW EDGES
     model.forEach((slice, i) => {
       ctx.beginPath();
       ctx.moveTo(slice[0].x + width / 2, height / 2 - slice[0].y - slice[0].z);
@@ -70,7 +71,35 @@ const Canvas = () => {
       ctx.closePath();
       ctx.strokeStyle = 'white'
       ctx.stroke();
-    });
+    });*/
+
+    // Drawing faces
+    drawFaces(ctx, model, width, height);
+  };
+
+  const drawFaces = (ctx, model, width, height) => {
+    ctx.fillStyle = 'rgba(167, 202, 232, 0.5)'; // light white color with transparency
+
+    for (let i = 0; i < model.length; i++) {
+      const currentSlice = model[i];
+      const nextSlice = model[(i + 1) % model.length];
+
+      for (let j = 0; j < currentSlice.length - 1; j++) {
+        const p0 = currentSlice[j];
+        const p1 = currentSlice[j + 1];
+        const p2 = nextSlice[j + 1];
+        const p3 = nextSlice[j];
+
+        ctx.beginPath();
+        ctx.moveTo(p0.x + width / 2, height / 2 - p0.y - p0.z);
+        ctx.lineTo(p1.x + width / 2, height / 2 - p1.y - p1.z);
+        ctx.lineTo(p2.x + width / 2, height / 2 - p2.y - p2.z);
+        ctx.lineTo(p3.x + width / 2, height / 2 - p3.y - p3.z);
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+      }
+    }
   };
 
   const translateModelToOriginAndApllyTansfornations = (model, centroid) => {
