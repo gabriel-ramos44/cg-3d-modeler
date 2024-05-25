@@ -1,0 +1,15 @@
+.container {
+    display: flex;
+  }
+
+  .sidebar {
+    width: 200px;
+    padding: 10px;
+  }
+
+  .main {
+    flex-grow: 1;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+  }
