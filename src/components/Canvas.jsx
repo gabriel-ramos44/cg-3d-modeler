@@ -71,10 +71,27 @@ const Canvas = () => {
       ctx.strokeStyle = 'white'
       ctx.stroke();
     });
+  };
 
-    const centroid = calculateCentroid(model);
-    console.log("Centroid:", centroid);
+  const translateModelToOriginAndApllyTansfornations = (model, centroid) => {
+    return model.map(slice => {
+      return slice.map(point => {
 
+        // translate to origin
+        let newPoint = translate(point, -centroid.x, -centroid.y, -centroid.z)
+
+        // apply scale and rotations
+        newPoint = rotateX(newPoint, transform.rotate.x);
+        newPoint = rotateY(newPoint, transform.rotate.y);
+        newPoint = rotateZ(newPoint, transform.rotate.z);
+        newPoint = scale(newPoint, transform.scale);
+
+        // translate back
+        newPoint = translate(newPoint, centroid.x, centroid.y, centroid.z)
+
+        return newPoint;
+      });
+    });
   };
 
   const generateVertices = (profile, slices) => {
@@ -93,12 +110,7 @@ const Canvas = () => {
           z: point.x * sin,
         };
 
-        // transformations
         p = translate(p, transform.translate.x, transform.translate.y, transform.translate.z);
-        p = rotateX(p, transform.rotate.x);
-        p = rotateY(p, transform.rotate.y);
-        p = rotateZ(p, transform.rotate.z);
-        p = scale(p, transform.scale);
 
         return p;
       });
@@ -106,7 +118,9 @@ const Canvas = () => {
       vertices.push(slice);
     }
 
-    return vertices;
+    const centroid = calculateCentroid(vertices);
+    const translatedVertices = translateModelToOriginAndApllyTansfornations(vertices, centroid);
+    return translatedVertices;
   };
 
   const handleSlicesChange = (e) => {
