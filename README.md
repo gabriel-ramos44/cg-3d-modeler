@@ -1,8 +1,20 @@
-# React + Vite
+# Computer graphics
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+An elementary 3D modeler, where object modeling is performed using the revolution technique.
 
-Currently, two official plugins are available:
+## To do
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react/README.md) uses [Babel](https://babeljs.io/) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+- [ ] Create 3D objects by revolving 2D profiles (generatrices) provided by the user. These profiles can have varying numbers of slices. Present the resulting objects using the wireframe technique with surface occlusion (using the painter’s algorithm associated with visibility calculations based on normals).
+
+- [ ] Present the modeled 3D objects (two or more) in a single window using either parallel or perspective projection, based on the user’s choice. Utilize this single window to showcase the objects using different shading techniques to be implemented.
+
+
+- [x] Geometrically transform the object by applying translations and rotations along the x, y, and z axes. Additionally, perform uniform scaling with the same factor across all three axes.
+
+- [ ] Display the 3D object using constant shading, incorporating surface occlusion (including the z-buffer algorithm).
+
+- [ ] Present the 3D object using Gouraud shading, again with surface occlusion (including the z-buffer algorithm).
+
+- [ ] Showcase the 3D object using simplified Phong shading, while still considering surface occlusion (including the z-buffer algorithm).
+
+- [ ] Ensure that all parameters related to camera settings, window configuration, viewport, lights, and materials composing the objects are editable by the software user during runtime.

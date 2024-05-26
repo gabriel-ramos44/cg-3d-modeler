@@ -26,7 +26,7 @@ const Canvas = () => {
     ctx.beginPath();
     ctx.moveTo(profile[0].x, profile[0].y);
     profile.forEach(point => ctx.lineTo(point.x, point.y));
-    ctx.closePath(); // close path before stroke
+    //ctx.closePath(); // close path before stroke
     ctx.stroke();
   };
 
@@ -195,14 +195,17 @@ const Canvas = () => {
         <div>
             <label>Rotate X: </label>
             <input type="range" min="-180" max="180" value={transform.rotate.x} onChange={(e) => setTransform({ ...transform, rotate: { ...transform.rotate, x: parseInt(e.target.value) } })} />
+            <a>{transform.rotate.x}</a>
         </div>
         <div>
             <label>Rotate Y: </label>
             <input type="range" min="-180" max="180" value={transform.rotate.y} onChange={(e) => setTransform({ ...transform, rotate: { ...transform.rotate, y: parseInt(e.target.value) } })} />
+            <a>{transform.rotate.y}</a>
         </div>
         <div>
             <label>Rotate Z: </label>
             <input type="range" min="-180" max="180" value={transform.rotate.z} onChange={(e) => setTransform({ ...transform, rotate: { ...transform.rotate, z: parseInt(e.target.value) } })} />
+            <a>{transform.rotate.z}</a>
         </div>
         <div>
             <label>Scale: </label>
