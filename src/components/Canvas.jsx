@@ -1,6 +1,7 @@
 import React, { useRef, useState } from 'react';
 import './Canvas.css';
 import { translate, rotateX, rotateY, rotateZ, scale } from '../utils/Transformations';
+import { calculateNormal, isFaceVisible } from '../utils/Operations';
 
 const Canvas = () => {
     const canvas2DRef = useRef(null);
@@ -8,7 +9,20 @@ const Canvas = () => {
     const [profile, setProfile] = useState([]);
     const [slices, setSlices] = useState(30);
     const [transform, setTransform] = useState({ translate: { x: 0, y: 0, z: 0 }, rotate: { x: 0, y: 0, z: 0 }, scale: 1 });
-    const VRP = { x: 0, y: 0, z: 1500 };
+    const VRP = { x: 0, y: 0, z: 700 };
+
+    const [models, setModels] = useState([])
+    const [selectedModelIndex, setSelectedModelIndex] = useState(null);
+
+    const handleModelSelect = (index) => {
+      setSelectedModelIndex(index);
+      const selectedModel = models[index];
+      setTransform(selectedModel.transform);
+      setProfile(selectedModel.profile);
+
+      // Redesenhar o perfil do modelo selecionado no canvas 2D
+      draw2DProfile(selectedModel.profile);
+    };
 
     const handle2DCanvasClick = (e) => {
     const canvas = canvas2DRef.current;
@@ -17,7 +31,15 @@ const Canvas = () => {
     const y = e.clientY - rect.top;
     const newProfile = [...profile, { x, y }];
     draw2DProfile(newProfile);
-    setProfile(newProfile); // update state after drawing
+    setProfile(newProfile);
+  };
+
+  const startCreatingNewModel = () => {
+    setProfile([]);
+    const canvas = canvas2DRef.current;
+    const ctx = canvas.getContext('2d');
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    setSelectedModelIndex(null);
   };
 
   const draw2DProfile = (profile) => {
@@ -25,9 +47,11 @@ const Canvas = () => {
     const ctx = canvas.getContext('2d');
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     ctx.beginPath();
-    ctx.moveTo(profile[0].x, profile[0].y);
-    profile.forEach(point => ctx.lineTo(point.x, point.y));
-    //ctx.closePath(); // close path before stroke
+    if (profile.length > 0) {
+      ctx.moveTo(profile[0].x, profile[0].y);
+      profile.forEach(point => ctx.lineTo(point.x, point.y));
+    }
+    ctx.closePath();
     ctx.stroke();
   };
 
@@ -54,66 +78,53 @@ const Canvas = () => {
     return centroid;
   };
 
-  const generate3DModel = () => {
+  const updateSelectedModel = () => {
+    if (selectedModelIndex !== null) {
+      const updatedModels = [...models];
+      const updatedModel = {
+        ...updatedModels[selectedModelIndex],
+        transform: transform
+      };
+
+      const centroid = calculateCentroid(updatedModel.vertices);
+      updatedModel.vertices = translateModelToOriginAndApllyTansfornations(updatedModel.vertices, centroid);
+      updatedModel.transform = { translate: { x: 0, y: 0, z: 0 }, rotate: { x: 0, y: 0, z: 0 }, scale: 1 }
+      setTransform(updatedModel.transform)
+      updatedModels[selectedModelIndex] = updatedModel;
+      setModels(updatedModels);
+      drawScene(updatedModels);
+    }
+  };
+
+  const drawScene = (customModels) => {
     const canvas = canvas3DRef.current;
     const ctx = canvas.getContext('2d');
     const width = canvas.width;
     const height = canvas.height;
-    ctx.clearRect(0, 0, width, height); // clear canvas before generating new model
+    ctx.clearRect(0, 0, width, height);
 
-    const model = generateVertices(profile, slices);
-
-    // Full orthographic projection
-    /* DRAW EDGES
-    model.forEach((slice, i) => {
-      ctx.beginPath();
-      ctx.moveTo(slice[0].x + width / 2, height / 2 - slice[0].y - slice[0].z);
-      slice.forEach(point => ctx.lineTo(point.x + width / 2, height / 2 - point.y - point.z));
-      ctx.closePath();
-      ctx.strokeStyle = 'white'
-      ctx.stroke();
-    });*/
-
-    // Drawing faces
-    drawFaces(ctx, model, width, height);
+    customModels.forEach((model, i) => {
+      drawFaces(ctx, model.vertices, width, height, model.transform);
+    });
   };
 
-  const calculateNormal = (p0, p1, p2) => {
-      const u = {
-          x: p1.x - p0.x,
-          y: p1.y - p0.y,
-          z: p1.z - p0.z
-      };
+  const generate3DModel = () => {
+    const newModel = {
+      vertices: generateVertices(profile, slices),
+      transform: { translate: { x: 0, y: 0, z: 0 }, rotate: { x: 0, y: 0, z: 0 }, scale: 1 },
+      profile: profile
+    };
 
-      const v = {
-          x: p2.x - p0.x,
-          y: p2.y - p0.y,
-          z: p2.z - p0.z
-      };
+    const updatedModels = [...models, newModel];
 
-      const normal = {
-          x: u.y * v.z - u.z * v.y,
-          y: u.z * v.x - u.x * v.z,
-          z: u.x * v.y - u.y * v.x
-      };
-
-      const length = Math.sqrt(normal.x * normal.x + normal.y * normal.y + normal.z * normal.z);
-      return { x: normal.x / length, y: normal.y / length, z: normal.z / length };
+    setModels(updatedModels);
+    drawScene(updatedModels);
+    startCreatingNewModel();
   };
 
-  const isFaceVisible = (centroid, normal) => {
-      const vectorToVRP = {
-          x: VRP.x - centroid.x,
-          y: VRP.y - centroid.y,
-          z: VRP.z - centroid.z
-      };
-
-      const dotProduct = normal.x * vectorToVRP.x + normal.y * vectorToVRP.y + normal.z * vectorToVRP.z;
-      return dotProduct > 0;
-  };
 
   const drawFaces = (ctx, model, width, height) => {
-    ctx.fillStyle = 'rgba(167, 202, 232, 1)'; // light white color with transparency
+    ctx.fillStyle = 'rgba(167, 202, 232, 0.7)'; // light white color with transparency
 
     for (let i = 0; i < model.length; i++) {
       const currentSlice = model[i];
@@ -133,7 +144,7 @@ const Canvas = () => {
 
       const normal = calculateNormal(p0, p1, p2);
 
-      if (isFaceVisible(centroid, normal)) {
+    if (/*isFaceVisible(centroid, normal, VRP)*/true) {
           ctx.beginPath();
           ctx.moveTo(p0.x + width / 2, height / 2 - p0.y - p0.z);
           ctx.lineTo(p1.x + width / 2, height / 2 - p1.y - p1.z);
@@ -151,16 +162,15 @@ const Canvas = () => {
     return model.map(slice => {
       return slice.map(point => {
 
-        // translate to origin
+        point = translate(point, transform.translate.x, transform.translate.y, transform.translate.z);
+
         let newPoint = translate(point, -centroid.x, -centroid.y, -centroid.z)
 
-        // apply scale and rotations
         newPoint = rotateX(newPoint, transform.rotate.x);
         newPoint = rotateY(newPoint, transform.rotate.y);
         newPoint = rotateZ(newPoint, transform.rotate.z);
         newPoint = scale(newPoint, transform.scale);
 
-        // translate back
         newPoint = translate(newPoint, centroid.x, centroid.y, centroid.z)
 
         return newPoint;
@@ -184,8 +194,6 @@ const Canvas = () => {
           z: point.x * sin,
         };
 
-        p = translate(p, transform.translate.x, transform.translate.y, transform.translate.z);
-
         return p;
       });
 
@@ -207,6 +215,15 @@ const Canvas = () => {
   return (
     <div className="container">
       <div className="sidebar">
+        <select onChange={(e) =>
+          e.target.value == '' ? startCreatingNewModel() : handleModelSelect(parseInt(e.target.value))
+          }>
+          <option value="">Create New Model</option>
+          {models.map((model, index) => (
+            <option key={index} value={index}>Model {index + 1}</option>
+          ))}
+        </select>
+        {selectedModelIndex && <button onClick={updateSelectedModel}>Update Selected Model</button>}
         <canvas
           ref={canvas2DRef}
           width="200"
@@ -228,33 +245,37 @@ const Canvas = () => {
         <div>
             <label>Translate X: </label>
             <input type="range" min="-100" max="100" value={transform.translate.x} onChange={(e) => setTransform({ ...transform, translate: { ...transform.translate, x: parseInt(e.target.value) } })} />
+            <a>{transform.translate.x}</a>
         </div>
         <div>
             <label>Translate Y: </label>
             <input type="range" min="-100" max="100" value={transform.translate.y} onChange={(e) => setTransform({ ...transform, translate: { ...transform.translate, y: parseInt(e.target.value) } })} />
+            <a>{transform.translate.y}</a>
         </div>
         <div>
             <label>Translate Z: </label>
             <input type="range" min="-100" max="100" value={transform.translate.z} onChange={(e) => setTransform({ ...transform, translate: { ...transform.translate, z: parseInt(e.target.value) } })} />
+            <a>{transform.translate.z}</a>
         </div>
         <div>
             <label>Rotate X: </label>
             <input type="range" min="-180" max="180" value={transform.rotate.x} onChange={(e) => setTransform({ ...transform, rotate: { ...transform.rotate, x: parseInt(e.target.value) } })} />
-            <a>{transform.rotate.x}</a>
+            <a>{transform.rotate.x}º</a>
         </div>
         <div>
             <label>Rotate Y: </label>
             <input type="range" min="-180" max="180" value={transform.rotate.y} onChange={(e) => setTransform({ ...transform, rotate: { ...transform.rotate, y: parseInt(e.target.value) } })} />
-            <a>{transform.rotate.y}</a>
+            <a>{transform.rotate.y}º</a>
         </div>
         <div>
             <label>Rotate Z: </label>
             <input type="range" min="-180" max="180" value={transform.rotate.z} onChange={(e) => setTransform({ ...transform, rotate: { ...transform.rotate, z: parseInt(e.target.value) } })} />
-            <a>{transform.rotate.z}</a>
+            <a>{transform.rotate.z}º</a>
         </div>
         <div>
             <label>Scale: </label>
             <input type="range" min="0.1" max="3" step="0.1" value={transform.scale} onChange={(e) => setTransform({ ...transform, scale: parseFloat(e.target.value) })} />
+            <a>{transform.scale}x</a>
         </div>
       </div>
       </div>
