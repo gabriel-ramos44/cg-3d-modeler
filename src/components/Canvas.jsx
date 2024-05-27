@@ -9,6 +9,7 @@ const Canvas = () => {
     const [profile, setProfile] = useState([]);
     const [slices, setSlices] = useState(30);
     const [transform, setTransform] = useState({ translate: { x: 0, y: 0, z: 0 }, rotate: { x: 0, y: 0, z: 0 }, scale: 1 });
+    const [projectionType, setProjectionType] = useState('parallel');
     const VRP = { x: 0, y: 0, z: 700 };
 
     const [models, setModels] = useState([])
@@ -127,34 +128,59 @@ const Canvas = () => {
     startCreatingNewModel();
   };
 
+  const projectPoint = (p, width, height) => {
+    console.log(projectionType)
+    if (projectionType === 'perspective') {
+      const d = VRP.z;
+      return {
+        x: (p.x * d) / (d + p.z) + width / 2,
+        y: height / 2 - (p.y * d) / (d + p.z)
+      };
+    } else { // parallel projection
+      return {
+        x: p.x + width / 2,
+        y: height / 2 - p.y - p.z
+      };
+    }
+  };
 
   const drawFaces = (ctx, model, width, height) => {
-    ctx.fillStyle = 'rgba(167, 202, 232, 0.7)'; // light white color with transparency
+    ctx.fillStyle = 'rgba(167, 202, 232, 1)'; // light white color with transparency
 
     for (let i = 0; i < model.length; i++) {
       const currentSlice = model[i];
       const nextSlice = model[(i + 1) % model.length];
 
       for (let j = 0; j < currentSlice.length - 1; j++) {
-        const p0 = currentSlice[j];
+        /*const p0 = currentSlice[j];
         const p1 = currentSlice[j + 1];
         const p2 = nextSlice[j + 1];
-        const p3 = nextSlice[j];
+        const p3 = nextSlice[j];*/
+        const p0 = projectPoint(currentSlice[j], width, height);
+        const p1 = projectPoint(currentSlice[j + 1], width, height);
+        const p2 = projectPoint(nextSlice[j + 1], width, height);
+        const p3 = projectPoint(nextSlice[j], width, height);
 
         const centroid = {
           x: (p0.x + p1.x + p2.x + p3.x) / 4,
           y: (p0.y + p1.y + p2.y + p3.y) / 4,
-          z: (p0.z + p1.z + p2.z + p3.z) / 4
+          //z: (p0.z + p1.z + p2.z + p3.z) / 4
+          z: (currentSlice[j].z + currentSlice[j + 1].z + nextSlice[j + 1].z + nextSlice[j].z) / 4
       };
 
-      const normal = calculateNormal(p0, p1, p2);
+      //const normal = calculateNormal(p0, p1, p2);
+      const normal = calculateNormal(currentSlice[j], currentSlice[j + 1], nextSlice[j + 1]);
 
-    if (/*isFaceVisible(centroid, normal, VRP)*/true) {
+    if (isFaceVisible(centroid, normal, VRP)) {
           ctx.beginPath();
-          ctx.moveTo(p0.x + width / 2, height / 2 - p0.y - p0.z);
+          /*ctx.moveTo(p0.x + width / 2, height / 2 - p0.y - p0.z);
           ctx.lineTo(p1.x + width / 2, height / 2 - p1.y - p1.z);
           ctx.lineTo(p2.x + width / 2, height / 2 - p2.y - p2.z);
-          ctx.lineTo(p3.x + width / 2, height / 2 - p3.y - p3.z);
+          ctx.lineTo(p3.x + width / 2, height / 2 - p3.y - p3.z);*/
+          ctx.moveTo(p0.x, p0.y);
+          ctx.lineTo(p1.x, p1.y);
+          ctx.lineTo(p2.x, p2.y);
+          ctx.lineTo(p3.x, p3.y);
           ctx.closePath();
           ctx.fill();
           ctx.stroke();
@@ -228,7 +254,7 @@ const Canvas = () => {
             <option key={index} value={index}>Model {index + 1}</option>
           ))}
         </select>
-        {selectedModelIndex || selectedModelIndex === 0 && <button onClick={updateSelectedModel}>Update Selected Model</button>}
+        {(selectedModelIndex || selectedModelIndex === 0) && <button onClick={updateSelectedModel}>Update Selected Model</button>}
         <canvas
           ref={canvas2DRef}
           width="200"
@@ -245,6 +271,13 @@ const Canvas = () => {
           min="3"
           max="360"
         />
+        <div>
+          <label>Projection Type: </label>
+          <select value={projectionType} onChange={(e) => {setProjectionType(e.target.value), drawScene(models)}}>
+            <option value="parallel">Parallel</option>
+            <option value="perspective">Perspective</option>
+          </select>
+        </div>
         <div>
         <h3>Transformations</h3>
         <div>
