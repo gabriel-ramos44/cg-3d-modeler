@@ -28,6 +28,9 @@ export const isFaceVisible = (centroid, normal, VRP) => {
         z: VRP.z - centroid.z
     };
 
-    const dotProduct = normal.x * vectorToVRP.x + normal.y * vectorToVRP.y + normal.z * vectorToVRP.z;
-    return dotProduct > 0;
+    const length = Math.sqrt(vectorToVRP.x * vectorToVRP.x + vectorToVRP.y * vectorToVRP.y + vectorToVRP.z * vectorToVRP.z);
+    const normalizedVectorToVRP = { x: vectorToVRP.x / length, y: vectorToVRP.y / length, z: vectorToVRP.z / length };
+
+    const dotProduct = normal.x * normalizedVectorToVRP.x + normal.y * normalizedVectorToVRP.y + normal.z * normalizedVectorToVRP.z;
+    return dotProduct < 0;
 };

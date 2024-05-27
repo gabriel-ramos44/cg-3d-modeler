@@ -152,42 +152,38 @@ const Canvas = () => {
       const nextSlice = model[(i + 1) % model.length];
 
       for (let j = 0; j < currentSlice.length - 1; j++) {
-        /*const p0 = currentSlice[j];
+        const p0 = currentSlice[j];
         const p1 = currentSlice[j + 1];
         const p2 = nextSlice[j + 1];
-        const p3 = nextSlice[j];*/
-        const p0 = projectPoint(currentSlice[j], width, height);
-        const p1 = projectPoint(currentSlice[j + 1], width, height);
-        const p2 = projectPoint(nextSlice[j + 1], width, height);
-        const p3 = projectPoint(nextSlice[j], width, height);
+        const p3 = nextSlice[j];
 
         const centroid = {
           x: (p0.x + p1.x + p2.x + p3.x) / 4,
           y: (p0.y + p1.y + p2.y + p3.y) / 4,
-          //z: (p0.z + p1.z + p2.z + p3.z) / 4
-          z: (currentSlice[j].z + currentSlice[j + 1].z + nextSlice[j + 1].z + nextSlice[j].z) / 4
-      };
+          z: (p0.z + p1.z + p2.z + p3.z) / 4
+        };
 
-      //const normal = calculateNormal(p0, p1, p2);
-      const normal = calculateNormal(currentSlice[j], currentSlice[j + 1], nextSlice[j + 1]);
+        const normal = calculateNormal(p0, p1, p2);
 
-    if (isFaceVisible(centroid, normal, VRP)) {
+        if (/*isFaceVisible(centroid, normal, VRP)*/true) {
+          const pp0 = projectPoint(p0, width, height);
+          const pp1 = projectPoint(p1, width, height);
+          const pp2 = projectPoint(p2, width, height);
+          const pp3 = projectPoint(p3, width, height);
+
           ctx.beginPath();
-          /*ctx.moveTo(p0.x + width / 2, height / 2 - p0.y - p0.z);
-          ctx.lineTo(p1.x + width / 2, height / 2 - p1.y - p1.z);
-          ctx.lineTo(p2.x + width / 2, height / 2 - p2.y - p2.z);
-          ctx.lineTo(p3.x + width / 2, height / 2 - p3.y - p3.z);*/
-          ctx.moveTo(p0.x, p0.y);
-          ctx.lineTo(p1.x, p1.y);
-          ctx.lineTo(p2.x, p2.y);
-          ctx.lineTo(p3.x, p3.y);
+          ctx.moveTo(pp0.x, pp0.y);
+          ctx.lineTo(pp1.x, pp1.y);
+          ctx.lineTo(pp2.x, pp2.y);
+          ctx.lineTo(pp3.x, pp3.y);
           ctx.closePath();
           ctx.fill();
           ctx.stroke();
-      }
+        }
       }
     }
-  };
+};
+
 
   const translateModelToOriginAndApllyTansfornations = (model, centroid) => {
     return model.map(slice => {
@@ -254,7 +250,6 @@ const Canvas = () => {
             <option key={index} value={index}>Model {index + 1}</option>
           ))}
         </select>
-        {(selectedModelIndex || selectedModelIndex === 0) && <button onClick={updateSelectedModel}>Update Selected Model</button>}
         <canvas
           ref={canvas2DRef}
           width="200"
@@ -262,7 +257,8 @@ const Canvas = () => {
           style={{ border: '1px solid black' }}
           onClick={handle2DCanvasClick}
         />
-        <button onClick={generate3DModel}>Generate 3D Model</button>
+        {selectedModelIndex === null && <button onClick={generate3DModel}>Generate 3D Model</button>}
+        {(selectedModelIndex || selectedModelIndex === 0) && <button onClick={updateSelectedModel}>Update Selected Model</button>}
         <label>Slices: </label>
         <input
           type="number"
