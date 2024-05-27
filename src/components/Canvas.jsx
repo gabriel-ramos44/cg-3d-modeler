@@ -19,8 +19,6 @@ const Canvas = () => {
       const selectedModel = models[index];
       setTransform(selectedModel.transform);
       setProfile(selectedModel.profile);
-
-      // Redesenhar o perfil do modelo selecionado no canvas 2D
       draw2DProfile(selectedModel.profile);
     };
 
@@ -103,7 +101,14 @@ const Canvas = () => {
     const height = canvas.height;
     ctx.clearRect(0, 0, width, height);
 
-    customModels.forEach((model, i) => {
+    const modelsWithCentroids = customModels.map((model) => {
+      const centroid = calculateCentroid(model.vertices);
+      return { ...model, centroid };
+    });
+
+    const sortedModels = modelsWithCentroids.sort((a, b) => b.centroid.z - a.centroid.z);
+
+    sortedModels.forEach((model) => {
       drawFaces(ctx, model.vertices, width, height, model.transform);
     });
   };
@@ -223,7 +228,7 @@ const Canvas = () => {
             <option key={index} value={index}>Model {index + 1}</option>
           ))}
         </select>
-        {selectedModelIndex && <button onClick={updateSelectedModel}>Update Selected Model</button>}
+        {selectedModelIndex || selectedModelIndex === 0 && <button onClick={updateSelectedModel}>Update Selected Model</button>}
         <canvas
           ref={canvas2DRef}
           width="200"
