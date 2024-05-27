@@ -1,7 +1,7 @@
 import React, { useRef, useState } from 'react';
 import './Canvas.css';
 import { translate, rotateX, rotateY, rotateZ, scale } from '../utils/Transformations';
-import { calculateNormal, isFaceVisible } from '../utils/Operations';
+import { calculateNormal, isFaceVisible, dotProduct, normalize } from '../utils/Operations';
 
 const Canvas = () => {
     const canvas2DRef = useRef(null);
@@ -11,6 +11,7 @@ const Canvas = () => {
     const [transform, setTransform] = useState({ translate: { x: 0, y: 0, z: 0 }, rotate: { x: 0, y: 0, z: 0 }, scale: 1 });
     const [projectionType, setProjectionType] = useState('parallel');
     const VRP = { x: 0, y: 0, z: 700 };
+    const lightDirection = { x: 0, y: 0, z: -1 }
 
     const [models, setModels] = useState([])
     const [selectedModelIndex, setSelectedModelIndex] = useState(null);
@@ -21,6 +22,12 @@ const Canvas = () => {
       setTransform(selectedModel.transform);
       setProfile(selectedModel.profile);
       draw2DProfile(selectedModel.profile);
+    };
+
+    const calculateLightIntensity = (normal) => {
+      const normalizedNormal = normalize(normal);
+      const normalizedLightDir = normalize(lightDirection);
+      return Math.max(dotProduct(normalizedNormal, normalizedLightDir), 0);
     };
 
     const handle2DCanvasClick = (e) => {
@@ -129,7 +136,6 @@ const Canvas = () => {
   };
 
   const projectPoint = (p, width, height) => {
-    console.log(projectionType)
     if (projectionType === 'perspective') {
       const d = VRP.z;
       return {
@@ -164,6 +170,9 @@ const Canvas = () => {
         };
 
         const normal = calculateNormal(p0, p1, p2);
+        const intensity = calculateLightIntensity(normal);
+        const shade = Math.floor(255 * intensity);
+        ctx.fillStyle = `rgb(${shade}, ${shade}, ${shade})`;
 
         if (/*isFaceVisible(centroid, normal, VRP)*/true) {
           const pp0 = projectPoint(p0, width, height);
