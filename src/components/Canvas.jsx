@@ -8,8 +8,9 @@ const Canvas = () => {
     const [profile, setProfile] = useState([]);
     const [slices, setSlices] = useState(30);
     const [transform, setTransform] = useState({ translate: { x: 0, y: 0, z: 0 }, rotate: { x: 0, y: 0, z: 0 }, scale: 1 });
+    const VRP = { x: 0, y: 0, z: 1500 };
 
-  const handle2DCanvasClick = (e) => {
+    const handle2DCanvasClick = (e) => {
     const canvas = canvas2DRef.current;
     const rect = canvas.getBoundingClientRect();
     const x = e.clientX - rect.left;
@@ -77,8 +78,42 @@ const Canvas = () => {
     drawFaces(ctx, model, width, height);
   };
 
+  const calculateNormal = (p0, p1, p2) => {
+      const u = {
+          x: p1.x - p0.x,
+          y: p1.y - p0.y,
+          z: p1.z - p0.z
+      };
+
+      const v = {
+          x: p2.x - p0.x,
+          y: p2.y - p0.y,
+          z: p2.z - p0.z
+      };
+
+      const normal = {
+          x: u.y * v.z - u.z * v.y,
+          y: u.z * v.x - u.x * v.z,
+          z: u.x * v.y - u.y * v.x
+      };
+
+      const length = Math.sqrt(normal.x * normal.x + normal.y * normal.y + normal.z * normal.z);
+      return { x: normal.x / length, y: normal.y / length, z: normal.z / length };
+  };
+
+  const isFaceVisible = (centroid, normal) => {
+      const vectorToVRP = {
+          x: VRP.x - centroid.x,
+          y: VRP.y - centroid.y,
+          z: VRP.z - centroid.z
+      };
+
+      const dotProduct = normal.x * vectorToVRP.x + normal.y * vectorToVRP.y + normal.z * vectorToVRP.z;
+      return dotProduct > 0;
+  };
+
   const drawFaces = (ctx, model, width, height) => {
-    ctx.fillStyle = 'rgba(167, 202, 232, 0.5)'; // light white color with transparency
+    ctx.fillStyle = 'rgba(167, 202, 232, 1)'; // light white color with transparency
 
     for (let i = 0; i < model.length; i++) {
       const currentSlice = model[i];
@@ -90,14 +125,24 @@ const Canvas = () => {
         const p2 = nextSlice[j + 1];
         const p3 = nextSlice[j];
 
-        ctx.beginPath();
-        ctx.moveTo(p0.x + width / 2, height / 2 - p0.y - p0.z);
-        ctx.lineTo(p1.x + width / 2, height / 2 - p1.y - p1.z);
-        ctx.lineTo(p2.x + width / 2, height / 2 - p2.y - p2.z);
-        ctx.lineTo(p3.x + width / 2, height / 2 - p3.y - p3.z);
-        ctx.closePath();
-        ctx.fill();
-        ctx.stroke();
+        const centroid = {
+          x: (p0.x + p1.x + p2.x + p3.x) / 4,
+          y: (p0.y + p1.y + p2.y + p3.y) / 4,
+          z: (p0.z + p1.z + p2.z + p3.z) / 4
+      };
+
+      const normal = calculateNormal(p0, p1, p2);
+
+      if (isFaceVisible(centroid, normal)) {
+          ctx.beginPath();
+          ctx.moveTo(p0.x + width / 2, height / 2 - p0.y - p0.z);
+          ctx.lineTo(p1.x + width / 2, height / 2 - p1.y - p1.z);
+          ctx.lineTo(p2.x + width / 2, height / 2 - p2.y - p2.z);
+          ctx.lineTo(p3.x + width / 2, height / 2 - p3.y - p3.z);
+          ctx.closePath();
+          ctx.fill();
+          ctx.stroke();
+      }
       }
     }
   };
