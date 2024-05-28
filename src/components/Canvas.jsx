@@ -93,7 +93,7 @@ const Canvas = () => {
       };
 
       const centroid = calculateCentroid(updatedModel.vertices);
-      updatedModel.vertices = translateModelToOriginAndApllyTansfornations(updatedModel.vertices, centroid);
+      updatedModel.vertices = translateModelToOriginAndApllyTransformations(updatedModel.vertices, centroid);
       updatedModel.transform = { translate: { x: 0, y: 0, z: 0 }, rotate: { x: 0, y: 0, z: 0 }, scale: 1 }
       setTransform(updatedModel.transform)
       updatedModels[selectedModelIndex] = updatedModel;
@@ -151,7 +151,9 @@ const Canvas = () => {
   };
 
   const drawFaces = (ctx, model, width, height) => {
-    ctx.fillStyle = 'rgba(167, 202, 232, 1)'; // light white color with transparency
+    //ctx.fillStyle = 'rgba(167, 202, 232, 1)'; // light white color with transparency
+    ctx.fillStyle = 'rgba(61, 25, 179, 1)'; // light white color with transparency
+
 
     for (let i = 0; i < model.length; i++) {
       const currentSlice = model[i];
@@ -174,7 +176,7 @@ const Canvas = () => {
         const shade = Math.floor(255 * intensity);
         ctx.fillStyle = `rgb(${shade}, ${shade}, ${shade})`;
 
-        if (/*isFaceVisible(centroid, normal, VRP)*/true) {
+        if (isFaceVisible(centroid, normal, VRP)) {
           const pp0 = projectPoint(p0, width, height);
           const pp1 = projectPoint(p1, width, height);
           const pp2 = projectPoint(p2, width, height);
@@ -194,7 +196,7 @@ const Canvas = () => {
 };
 
 
-  const translateModelToOriginAndApllyTansfornations = (model, centroid) => {
+  const translateModelToOriginAndApllyTransformations = (model, centroid) => {
     return model.map(slice => {
       return slice.map(point => {
 
@@ -237,7 +239,7 @@ const Canvas = () => {
     }
 
     const centroid = calculateCentroid(vertices);
-    const translatedVertices = translateModelToOriginAndApllyTansfornations(vertices, centroid);
+    const translatedVertices = translateModelToOriginAndApllyTransformations(vertices, centroid);
     return translatedVertices;
   };
 
