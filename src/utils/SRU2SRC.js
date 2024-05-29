@@ -4,9 +4,9 @@ import { normalize, crossProduct } from './VectorsOperations';
 export const computeCameraMatrix = (VRP, P, viewUp) => {
     // Calculate N, the normalized direction vector from VRP to P
     const N = normalize({
-      x: P.x - VRP.x,
-      y: P.y - VRP.y,
-      z: P.z - VRP.z,
+      x: VRP.x - P.x,
+      y: VRP.y - P.y,
+      z: VRP.z -P.z,
     });
 
     // Calculate U, the perpendicular vector to N and viewUp
@@ -25,9 +25,9 @@ export const computeCameraMatrix = (VRP, P, viewUp) => {
 
     // Create the translation matrix
     const translationMatrix = [
-      [1, 0, 0, -VRP.x],
-      [0, 1, 0, -VRP.y],
-      [0, 0, 1, -VRP.z],
+      [1, 0, 0, VRP.x],
+      [0, 1, 0, VRP.y],
+      [0, 0, 1, VRP.z],
       [0, 0, 0, 1],
     ];
 
