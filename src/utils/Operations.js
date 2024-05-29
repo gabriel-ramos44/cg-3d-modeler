@@ -1,3 +1,5 @@
+import { normalize, dotProduct } from './VectorsOperations';
+
 export const calculateNormal = (p0, p1, p2) => {
     //isVectorsAnticlockwise(p0, p1, p2)
 
@@ -23,15 +25,6 @@ export const calculateNormal = (p0, p1, p2) => {
     return { x: normal.x / length, y: normal.y / length, z: normal.z / length };
 };
 
-export const dotProduct = (v1, v2) => {
-    return v1.x * v2.x + v1.y * v2.y + v1.z * v2.z;
-};
-
-export const normalize = (vector) => {
-    const length = Math.sqrt(vector.x * vector.x + vector.y * vector.y + vector.z * vector.z);
-    return { x: vector.x / length, y: vector.y / length, z: vector.z / length };
-};
-
 export const isFaceVisible = (centroid, normal, VRP) => {
     const vectorToVRP = {
         x: VRP.x - centroid.x,
@@ -39,8 +32,7 @@ export const isFaceVisible = (centroid, normal, VRP) => {
         z: VRP.z - centroid.z
     };
 
-    const length = Math.sqrt(vectorToVRP.x * vectorToVRP.x + vectorToVRP.y * vectorToVRP.y + vectorToVRP.z * vectorToVRP.z);
-    const normalizedVectorToVRP = { x: vectorToVRP.x / length, y: vectorToVRP.y / length, z: vectorToVRP.z / length };
+    const normalizedVectorToVRP =  normalize(vectorToVRP)
 
     const dotProduct1 = dotProduct(normal, normalizedVectorToVRP)
 
