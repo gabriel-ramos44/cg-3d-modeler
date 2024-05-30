@@ -8,12 +8,16 @@ export const computeCameraMatrix = (VRP, P, viewUp) => {
       y: VRP.y - P.y,
       z: VRP.z -P.z,
     });
+    //console.log('Vector N')
+    //console.log(N)
 
     // Calculate U, the perpendicular vector to N and viewUp
     const U = normalize(crossProduct(viewUp, N));
 
     // Calculate V, the adjusted viewUp vector
     const V = crossProduct(N, U);
+    //console.log('Vector V')
+    //console.log(V)
 
     // Create the rotation matrix
     const rotationMatrix = [
@@ -25,19 +29,20 @@ export const computeCameraMatrix = (VRP, P, viewUp) => {
 
     // Create the translation matrix
     const translationMatrix = [
-      [1, 0, 0, VRP.x],
-      [0, 1, 0, VRP.y],
-      [0, 0, 1, VRP.z],
+      [1, 0, 0, -VRP.x],
+      [0, 1, 0, -VRP.y],
+      [0, 0, 1, -VRP.z],
       [0, 0, 0, 1],
     ];
 
     // Combine the rotation and translation matrix
-    const cameraMatrix = multiplyMatrices(rotationMatrix, translationMatrix);
+    // M(SRU, SRC)
+    const cameraMatrix = multiplyMatrices(rotationMatrix, translationMatrix );
 
+    /*console.log('Camera Matrix:');
+    for (const row of cameraMatrix) {
+        console.log(row.join('\t'));
+    }
+    console.log('________________________')*/
     return cameraMatrix;
   };
-
-
-
-
-
