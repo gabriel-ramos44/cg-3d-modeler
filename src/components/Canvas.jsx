@@ -4,11 +4,22 @@ import { translate, rotateX, rotateY, rotateZ, scale } from '../utils/Transforma
 import { calculateNormal, isFaceVisible,  } from '../utils/Operations';
 import { dotProduct, normalize } from '../utils/VectorsOperations';
 import { computeCameraMatrix } from '../utils/SRU2SRC';
+import { computeViewMatrix } from '../utils/View';
+import { multiplyMatrices } from '../utils/MatricesOperations'
+import { computePerspectiveProjMatrix, computeParallelProjectionMatrix } from '../utils/Projections'
 
-const initialState = {
+const transformationsInitialState = {
   translate: { x: 0, y: 0, z: 0 },
   rotate: { x: 0, y: 0, z: 0 },
   scale: 1
+};
+
+const cameraInitialState = {
+  VRP: { x: 0, y: 0, z: 500 },
+  focalPoint: { x: 0, y: 0, z: 0 }, // P
+  distance: 500,
+  window:  {x:{min: 0, max: 500}, y:{min: 0, max: 500}, z:{min: 0, max: 1000} },
+  viewport:  {u:{min: 0, max: 900}, v:{min: 0, max:900}}
 };
 
 const transformReducer = (state, action) => {
@@ -28,7 +39,7 @@ const transformReducer = (state, action) => {
     case 'scale':
       return { ...state, scale: action.value };
     case 'reset':
-      return { ...initialState, ...action.value };
+      return { ...transformationsInitialState, ...action.value };
     default:
       return state;
   }
@@ -39,10 +50,17 @@ const Canvas = () => {
   const canvas3DRef = useRef(null);
   const [profile, setProfile] = useState([]);
   const [slices, setSlices] = useState(30);
-  const [transform, dispatchTransform] = useReducer(transformReducer, initialState);
-  const [projectionType, setProjectionType] = useState('parallel');
-  const VRP = { x: 0, y: 0, z: 800 };
-  const focalPoint = { x: 0, y: 0, z: 0 }; // P
+  const [transform, dispatchTransform] = useReducer(transformReducer, transformationsInitialState);
+  const [projectionType, setProjectionType] = useState('perspective');//useState('parallel');
+  //const VRP = { x: 0, y: 0, z: 800 };
+  const [VRP, setVRP] = useState(cameraInitialState.VRP)
+  //const focalPoint = { x: 0, y: 0, z: 0 }; // P
+  const [focalPoint, setFocalPoint] = useState(cameraInitialState.focalPoint)
+
+  const [window, setWindow] = useState(cameraInitialState.window)
+  const [viewport, setViewport] = useState(cameraInitialState.viewport)
+  const [distance, setDistance] = useState(cameraInitialState.distance)
+
   const viewUp = { x: 0, y: 1, z: 0 }; // Y
   const lightDirection = { x: 0, y: 0, z: -1 };
 
@@ -74,11 +92,11 @@ const Canvas = () => {
   const applyCameraTransform = (modelVertices, cameraMatrix) => {
     return modelVertices.map(slice =>
       slice.map(point => {
-        const transformedPoint = multiplyMatrixAndPoint(cameraMatrix, point);
+        const transformedPoint = centralizePointOnCanva(multiplyMatrixAndPoint(cameraMatrix, point));
         return {
-          x: transformedPoint[0],
-          y: transformedPoint[1],
-          z: transformedPoint[2],
+          x: transformedPoint.x,
+          y: transformedPoint.y,
+          z: transformedPoint.z,
         };
       })
     );
@@ -157,12 +175,23 @@ const Canvas = () => {
 
       const centroid = calculateCentroid(updatedModel.vertices);
       updatedModel.vertices = translateModelToOriginAndApplyTransformations(updatedModel.vertices, centroid);
-      updatedModel.transform = initialState;
-      //dispatchTransform({ type: 'reset', value: initialState });
+      updatedModel.transform = transformationsInitialState;
+      //dispatchTransform({ type: 'reset', value: transformationsInitialState });
       updatedModels[selectedModelIndex] = updatedModel;
       setModels(updatedModels);
     }
   };
+
+  const centralizePointOnCanva = (p) => {
+    const X = (viewport.u.max + viewport.u.min) / 2;
+    const Y = (viewport.v.max + viewport.v.min) / 2;
+
+    return {
+      x: p[0] + X,
+      y: -p[1] + Y,
+      z: p[2],
+    };
+  }
 
   const drawScene = (customModels) => {
     const canvas = canvas3DRef.current;
@@ -171,11 +200,23 @@ const Canvas = () => {
     const height = canvas.height;
     ctx.clearRect(0, 0, width, height);
 
+    // Msru src
     const cameraMatrix = computeCameraMatrix(VRP, focalPoint, viewUp);
+    // Mjp
+    const viewMatrix = computeViewMatrix(window, viewport);
 
+    // Mproj
+    const projectionMatrix = projectionType === 'perspective'
+      ? computePerspectiveProjMatrix(distance)
+      : computeParallelProjectionMatrix(window);
+
+    const mJpXmProj = multiplyMatrices(viewMatrix, projectionMatrix);
+    const SruSrtMatrix = multiplyMatrices(mJpXmProj, cameraMatrix);
+
+    // SRU to SRT
     const modelsWithTransformedVertices = customModels.map(model => ({
       ...model,
-      vertices: applyCameraTransform(model.vertices, cameraMatrix),
+      vertices: applyCameraTransform(model.vertices, SruSrtMatrix),
     }));
 
     const modelsWithCentroids = modelsWithTransformedVertices.map((model) => {
@@ -193,7 +234,7 @@ const Canvas = () => {
   const generate3DModel = () => {
     const newModel = {
       vertices: generateVertices(profile, slices),
-      transform: initialState,
+      transform: transformationsInitialState,
       profile,
     };
 
@@ -204,7 +245,7 @@ const Canvas = () => {
 
   const projectPoint = (p, width, height) => {
     if (projectionType === 'perspective') {
-      const d = VRP.z;
+      const d = distance//VRP.z;
       return {
         x: (p.x * d) / (d + p.z) + width / 2,
         y: height / 2 - (p.y * d) / (d + p.z),
@@ -219,47 +260,67 @@ const Canvas = () => {
   };
 
   const drawFaces = (ctx, model, width, height) => {
+    const faces = [];
+
+    // Criar uma lista de faces com seus centroides e profundidade média
     for (let i = 0; i < model.length; i++) {
-      const currentSlice = model[i];
-      const nextSlice = model[(i + 1) % model.length];
+        const currentSlice = model[i];
+        const nextSlice = model[(i + 1) % model.length];
 
-      for (let j = 0; j < currentSlice.length - 1; j++) {
-        const p0 = currentSlice[j];
-        const p1 = currentSlice[j + 1];
-        const p2 = nextSlice[j + 1];
-        const p3 = nextSlice[j];
+        for (let j = 0; j < currentSlice.length - 1; j++) {
+            const p0 = currentSlice[j];
+            const p1 = currentSlice[j + 1];
+            const p2 = nextSlice[j + 1];
+            const p3 = nextSlice[j];
 
-        const centroid = {
-          x: (p0.x + p1.x + p2.x + p3.x) / 4,
-          y: (p0.y + p1.y + p2.y + p3.y) / 4,
-          z: (p0.z + p1.z + p2.z + p3.z) / 4,
-        };
+            const centroid = {
+                x: (p0.x + p1.x + p2.x + p3.x) / 4,
+                y: (p0.y + p1.y + p2.y + p3.y) / 4,
+                z: (p0.z + p1.z + p2.z + p3.z) / 4,
+            };
+
+            const face = {
+                vertices: [p0, p1, p2, p3],
+                centroid: centroid,
+                depth: centroid.z,
+            };
+
+            faces.push(face);
+        }
+    }
+
+    // Ordenar as faces com base na profundidade (z)
+    faces.sort((a, b) => b.depth - a.depth);
+
+    // Desenhar as faces na ordem ordenada
+    faces.forEach(face => {
+        const [p0, p1, p2, p3] = face.vertices;
 
         const normal = calculateNormal(p0, p1, p2);
         const intensity = calculateLightIntensity(normal);
         const shade = Math.floor(255 * intensity);
         //ctx.fillStyle = `rgb(${shade}, ${shade}, ${shade})`;
+        ctx.strokeStyle = `rgb(0, 50, 255)`;
         ctx.fillStyle = `rgb(255, 255, 255, 0)`;
 
-        //if(true){
-        if(isFaceVisible(centroid, normal, VRP)) {
-          const pp0 = projectPoint(p0, width, height);
-          const pp1 = projectPoint(p1, width, height);
-          const pp2 = projectPoint(p2, width, height);
-          const pp3 = projectPoint(p3, width, height);
+        if (isFaceVisible(face.centroid, normal, VRP)) {
+            const pp0 = p0; //projectPoint(p0, width, height);
+            const pp1 = p1; //projectPoint(p1, width, height);
+            const pp2 = p2; //projectPoint(p2, width, height);
+            const pp3 = p3; //projectPoint(p3, width, height);
 
-          ctx.beginPath();
-          ctx.moveTo(pp0.x, pp0.y);
-          ctx.lineTo(pp1.x, pp1.y);
-          ctx.lineTo(pp2.x, pp2.y);
-          ctx.lineTo(pp3.x, pp3.y);
-          ctx.closePath();
-          ctx.fill();
-          ctx.stroke();
+            ctx.beginPath();
+            ctx.moveTo(pp0.x, pp0.y);
+            ctx.lineTo(pp1.x, pp1.y);
+            ctx.lineTo(pp2.x, pp2.y);
+            ctx.lineTo(pp3.x, pp3.y);
+            ctx.closePath();
+            ctx.fill();
+            ctx.stroke();
         }
-      }
-    }
-  };
+    });
+};
+
 
   const translateModelToOriginAndApplyTransformations = (model, centroid) => {
     return model.map((slice) =>
@@ -274,7 +335,6 @@ const Canvas = () => {
         newPoint = scale(newPoint, transform.scale);
 
         newPoint = translate(newPoint, centroid.x, centroid.y, centroid.z);
-
         return newPoint;
       })
     );
@@ -294,11 +354,16 @@ const Canvas = () => {
         y: point.y,
         z: point.x * sin,
       }));
-
       vertices.push(slice);
     }
 
     const centroid = calculateCentroid(vertices);
+    vertices.forEach((slice) => {
+      slice.forEach((point) => {
+        const translatedPoint = translate(point, -centroid.x, -centroid.y, -centroid.z);
+        Object.assign(point, translatedPoint); // Atualiza os valores do ponto original
+      });
+    });
     return translateModelToOriginAndApplyTransformations(vertices, centroid);
   };
 
@@ -331,6 +396,61 @@ const Canvas = () => {
             <option value="parallel">Parallel</option>
             <option value="perspective">Perspective</option>
           </select>
+        </div>
+        <div>
+        <h3>Camera</h3>
+          <h4>VRP</h4>
+            <label>X</label>
+              <input
+                type="number"
+                min="-1000"
+                max="1000"
+                value={focalPoint.x}
+                onChange={(e) => setVRP(  { ...focalPoint, x: parseInt(e.target.value)})}
+              />
+            <label>Y</label>
+              <input
+                type="number"
+                min="-1000"
+                max="1000"
+                value={VRP.y}
+                onChange={(e) => setVRP(  { ...VRP, y: parseInt(e.target.value)})}
+              />
+            <label>Z</label>
+              <input
+                type="number"
+                min="-1000"
+                max="1000"
+                value={VRP.z}
+                onChange={(e) => setVRP(  { ...VRP, z: parseInt(e.target.value)})}
+              />
+          <h4>Focal Point</h4>
+            <div>
+            <label>X</label>
+              <input
+                type="number"
+                min="-1000"
+                max="1000"
+                value={focalPoint.x}
+                onChange={(e) => setFocalPoint(  { ...focalPoint, x: parseInt(e.target.value)})}
+              />
+            <label>Y</label>
+              <input
+                type="number"
+                min="-1000"
+                max="1000"
+                value={focalPoint.y}
+                onChange={(e) => setFocalPoint(  { ...focalPoint, y: parseInt(e.target.value)})}
+              />
+            <label>Z</label>
+              <input
+                type="number"
+                min="-1000"
+                max="1000"
+                value={focalPoint.z}
+                onChange={(e) => setFocalPoint(  { ...focalPoint, z: parseInt(e.target.value)})}
+              />
+            </div>
         </div>
         <div>
           <h3>Transformations</h3>
