@@ -2,7 +2,7 @@ import React, { useRef, useState, useEffect, useReducer, useMemo } from 'react';
 import './Canvas.css';
 import { translate, rotateX, rotateY, rotateZ, scale } from '../utils/Transformations';
 import { calculateNormal, isFaceVisible,  } from '../utils/Operations';
-import { dotProduct, normalize, subtractVectors, vectorByScalar } from '../utils/VectorsOperations';
+import { dotProduct, normalize, subtractVectors, addVectors, vectorByScalar } from '../utils/VectorsOperations';
 import { computeCameraMatrix } from '../utils/SRU2SRC';
 import { computeViewMatrix } from '../utils/View';
 import { multiplyMatrices } from '../utils/MatricesOperations'
@@ -16,7 +16,7 @@ const transformationsInitialState = {
 
 const cameraInitialState = {
   VRP: { x: 0, y: 0, z: 500 },
-  focalPoint: { x: 0, y: 0, z: 0 }, // P
+  focalPoint: { x: 0, y: 0, z: 0 },
   distance: 500,
   window:  {x:{min: 0, max: 500}, y:{min: 0, max: 500}, z:{min: 0, max: 1000} },
   viewport:  {u:{min: 0, max: 900}, v:{min: 0, max:900}},
@@ -50,7 +50,7 @@ const defaultMaterial = {
   Ka: { r: 0.2, g: 0.2, b: 0.2 },
   Kd: { r: 0.8, g: 0.8, b: 0.8 },
   Ks: { r: 0.5, g: 0.5, b: 0.5 },
-  shininess: 32
+  shininess: 15
 };
 
 const Canvas = () => {
@@ -59,7 +59,7 @@ const Canvas = () => {
   const [profile, setProfile] = useState([]);
   const [slices, setSlices] = useState(30);
   const [transform, dispatchTransform] = useReducer(transformReducer, transformationsInitialState);
-  const [projectionType, setProjectionType] = useState('perspective');//useState('parallel');
+  const [projectionType, setProjectionType] = useState('perspective');
 
   const [VRP, setVRP] = useState(cameraInitialState.VRP)
 
@@ -69,7 +69,6 @@ const Canvas = () => {
   const [viewport, setViewport] = useState(cameraInitialState.viewport)
   const [distance, setDistance] = useState(cameraInitialState.distance)
 
-  // Lampada
   const [lightSource, setLightSource] = useState({
     position: { x: 100, y: 100, z: 200 },
     intensity: { r: 255, g: 255, b: 255 }
@@ -329,7 +328,7 @@ const Canvas = () => {
     const centroid = face.centroid;
     const N = normalize(face.normal);
     const L = normalize(subtractVectors(light.position, centroid));
-    const V = normalize(subtractVectors(VRP, centroid)); // Viewer direction (from centroid to VRP)
+    const V = normalize(subtractVectors(VRP, centroid)); // Viewer to VRP
 
     const dotProductLN = dotProduct(N, L);
 
@@ -339,7 +338,6 @@ const Canvas = () => {
       b: ambient.intensity.b * material.Ka.b
     };
 
-    // Diffuse component
     let Id = { r: 0, g: 0, b: 0 };
     if (dotProductLN > 0) {
       Id = {
@@ -349,9 +347,8 @@ const Canvas = () => {
       };
     }
 
-    // Specular component
     let Is = { r: 0, g: 0, b: 0 };
-    if (dotProductLN > 0) { // Only calculate specular if surface is facing the light
+    if (dotProductLN > 0) { // if surface is facing the light
       const R = normalize(subtractVectors(vectorByScalar(N, 2 * dotProductLN), L)); // Reflection vector
       const dotProductRV = Math.max(dotProduct(R, V), 0); // Ensure non-negative
       const specularIntensity = Math.pow(dotProductRV, material.shininess);
@@ -362,9 +359,9 @@ const Canvas = () => {
       };
     }
 
-    // Combine components
+
     let color = {
-      r: Math.min(Ia.r + Id.r + Is.r, 255), // Clamp to 255
+      r: Math.min(Ia.r + Id.r + Is.r, 255),
       g: Math.min(Ia.g + Id.g + Is.g, 255),
       b: Math.min(Ia.b + Id.b + Is.b, 255)
     };
@@ -390,9 +387,7 @@ const Canvas = () => {
   const drawFaces = (ctx, faces, width, height, modelIndex) => {
     faces.forEach(face => {
         const [p0, p1, p2] = face.vertices;
-        // Calculate color using flat shading
-
-        if (renderMode === 'wireframe') {
+          if (renderMode === 'wireframe') {
           ctx.strokeStyle = `rgb(0, 50, 255)`;
           ctx.fillStyle = `rgb(255, 255, 255, 0)`;
           ctx.beginPath();
@@ -403,7 +398,6 @@ const Canvas = () => {
           ctx.stroke();
         }
         else if (renderMode === 'constant') {
-          //const color = calculateFlatShading(face, lightSource, ambientLight, materials[modelIndex]);
           const color = calculateFlatShading(face, lightSource, ambientLight, materials[modelIndex]);
           drawPolygon(ctx, p0, p1, p2, color, zBuffer);
         }
@@ -418,7 +412,7 @@ const Canvas = () => {
                 x: vertice.x,
                 y: vertice.y,
                 z: vertice.z,
-                color: { // Add color as an object
+                color: {
                   r: color.r,
                   g: color.g,
                   b: color.b,
@@ -429,10 +423,77 @@ const Canvas = () => {
           drawPolygonWithColorInterpolation(ctx, verticesWithColors[0], verticesWithColors[1], verticesWithColors[2], zBuffer)
         }
         else if (renderMode === 'phong') {
+          const verticesWithNormals = []
+          face.vertices.forEach(vertice => {
+            const verticeNormal = calculateVertexNormal(vertice, faces)
+            verticesWithNormals.push(
+              {
+                coordinates:{
+                  x: vertice.x,
+                  y: vertice.y,
+                  z: vertice.z,
+                },
 
+                normal: verticeNormal,
+                }
+            )
+        });
+        drawPolygonWithNormalInterpolation (
+          ctx,
+          verticesWithNormals[0].coordinates,
+          verticesWithNormals[1].coordinates,
+          verticesWithNormals[2].coordinates,
+          verticesWithNormals[0].normal,
+          verticesWithNormals[1].normal,
+          verticesWithNormals[2].normal,
+          zBuffer,
+          modelIndex
+        )
         }
     });
 };
+
+const drawPolygonWithNormalInterpolation = (ctx, p0, p1, p2, n0, n1, n2, zBuffer, modelIndex) => {
+  const minX = Math.min(p0.x, p1.x, p2.x);
+  const maxX = Math.max(p0.x, p1.x, p2.x);
+  const minY = Math.min(p0.y, p1.y, p2.y);
+  const maxY = Math.max(p0.y, p1.y, p2.y);
+
+  for (let x = Math.floor(minX); x <= Math.ceil(maxX); x++) {
+    for (let y = Math.floor(minY); y <= Math.ceil(maxY); y++) {
+      if (isPointInsideTriangle(x, y, p0, p1, p2)) {
+        const z = calculateZValue(x, y, p0, p1, p2);
+        if (z < zBuffer[x][y]) {
+          zBuffer[x][y] = z;
+
+          // interp nomrms
+          const normal = interpolateNormal(x, y, p0, p1, p2, n0, n1, n2);
+
+          const color = calculatePhongShading(normal, {x, y, z}, lightSource, ambientLight, materials[modelIndex]);
+
+          ctx.fillStyle = `rgb(${Math.round(color.r)}, ${Math.round(color.g)}, ${Math.round(color.b)})`;
+          ctx.fillRect(x, y, 1, 1);
+        }
+      }
+    }
+  }
+};
+
+const interpolateNormal = (x, y, p0, p1, p2, n0, n1, n2) => {
+  const areaTotal = edgeFunction(p0, p1, p2);
+  const w0 = edgeFunction(p1, p2, {x, y}) / areaTotal;
+  const w1 = edgeFunction(p2, p0, {x, y}) / areaTotal;
+  const w2 = edgeFunction(p0, p1, {x, y}) / areaTotal;
+
+  return {
+    x: w0 * n0.x + w1 * n1.x + w2 * n2.x,
+    y: w0 * n0.y + w1 * n1.y + w2 * n2.y,
+    z: w0 * n0.z + w1 * n1.z + w2 * n2.z
+  };
+};
+
+// area + pesos baricentricos
+const edgeFunction = (v0, v1, v2) => (v2.x - v0.x) * (v1.y - v0.y) - (v2.y - v0.y) * (v1.x - v0.x);
 
 const drawPolygonWithColorInterpolation = (ctx, p0, p1, p2, zBuffer) => {
   const minX = Math.min(p0.x, p1.x, p2.x);
@@ -456,13 +517,12 @@ const drawPolygonWithColorInterpolation = (ctx, p0, p1, p2, zBuffer) => {
 };
 
 const interpolateColor = (x, y, p0, p1, p2) => {
-  // Barycentric coordinates calculation
+  // barycentric
   const denom = (p1.y - p2.y) * (p0.x - p2.x) + (p2.x - p1.x) * (p0.y - p2.y);
   const w1 = ((p1.y - p2.y) * (x - p2.x) + (p2.x - p1.x) * (y - p2.y)) / denom;
   const w2 = ((p2.y - p0.y) * (x - p2.x) + (p0.x - p2.x) * (y - p2.y)) / denom;
   const w3 = 1 - w1 - w2;
 
-  // Interpolating the color
   const r = w1 * p0.color.r + w2 * p1.color.r + w3 * p2.color.r;
   const g = w1 * p0.color.g + w2 * p1.color.g + w3 * p2.color.g;
   const b = w1 * p0.color.b + w2 * p1.color.b + w3 * p2.color.b;
@@ -475,7 +535,48 @@ const interpolateColor = (x, y, p0, p1, p2) => {
 const calculateGouraudShading = (vertexNormal, vertex, light, ambient, material) => {
   const N = vertexNormal;
   const L = normalize(subtractVectors(light.position, vertex));
-  const V = normalize(subtractVectors(VRP, vertex)); // Viewer direction (from centroid to VRP)
+  const V = normalize(subtractVectors(VRP, vertex)); // viewer direction
+  const dotProductLN = dotProduct(N, L);
+
+  let Ia = {
+    r: ambient.intensity.r * material.Ka.r,
+    g: ambient.intensity.g * material.Ka.g,
+    b: ambient.intensity.b * material.Ka.b
+  };
+
+  let Id = { r: 0, g: 0, b: 0 };
+  if (dotProductLN > 0) {
+    Id = {
+      r: light.intensity.r * material.Kd.r * dotProductLN,
+      g: light.intensity.g * material.Kd.g * dotProductLN,
+      b: light.intensity.b * material.Kd.b * dotProductLN
+    };
+  }
+  // Specular component
+  let Is = { r: 0, g: 0, b: 0 };
+  if (dotProductLN > 0) {
+    const R = normalize(subtractVectors(vectorByScalar(N, 2 * dotProductLN), L)); // reflection vector
+    const dotProductRV = Math.max(dotProduct(R, V), 0);
+    const specularIntensity = Math.pow(dotProductRV, material.shininess);
+    Is = {
+      r: light.intensity.r * material.Ks.r * specularIntensity,
+      g: light.intensity.g * material.Ks.g * specularIntensity,
+      b: light.intensity.b * material.Ks.b * specularIntensity
+    };
+  }
+
+  let color = {
+    r: Math.min(Ia.r + Id.r + Is.r, 255),
+    g: Math.min(Ia.g + Id.g + Is.g, 255),
+    b: Math.min(Ia.b + Id.b + Is.b, 255)
+  };
+  return color;
+};
+
+const calculatePhongShading = (vertexNormal, vertex, light, ambient, material) => {
+  const N = vertexNormal;
+  const L = normalize(subtractVectors(light.position, vertex));
+  const V = normalize(subtractVectors(VRP, vertex)); // Viewer direction
 
   const dotProductLN = dotProduct(N, L);
 
@@ -485,7 +586,7 @@ const calculateGouraudShading = (vertexNormal, vertex, light, ambient, material)
     b: ambient.intensity.b * material.Ka.b
   };
 
-  // Diffuse component
+
   let Id = { r: 0, g: 0, b: 0 };
   if (dotProductLN > 0) {
     Id = {
@@ -497,9 +598,11 @@ const calculateGouraudShading = (vertexNormal, vertex, light, ambient, material)
 
   // Specular component
   let Is = { r: 0, g: 0, b: 0 };
-  if (dotProductLN > 0) { // Only calculate specular if surface is facing the light
-    const R = normalize(subtractVectors(vectorByScalar(N, 2 * dotProductLN), L)); // Reflection vector
-    const dotProductRV = Math.max(dotProduct(R, V), 0); // Ensure non-negative
+  if (dotProductLN > 0) {
+
+    const H = addVectors(L, V)
+    const dotProductRV = Math.max(dotProduct(N, H), 0);
+
     const specularIntensity = Math.pow(dotProductRV, material.shininess);
     Is = {
       r: light.intensity.r * material.Ks.r * specularIntensity,
@@ -510,7 +613,7 @@ const calculateGouraudShading = (vertexNormal, vertex, light, ambient, material)
 
   // Combine components
   let color = {
-    r: Math.min(Ia.r + Id.r + Is.r, 255), // Clamp to 255
+    r: Math.min(Ia.r + Id.r + Is.r, 255),
     g: Math.min(Ia.g + Id.g + Is.g, 255),
     b: Math.min(Ia.b + Id.b + Is.b, 255)
   };
@@ -520,7 +623,6 @@ const calculateGouraudShading = (vertexNormal, vertex, light, ambient, material)
 function calculateVertexNormal(vertex, faces) {
   let vertexNormal = { x: 0, y: 0, z: 0 };
   faces.forEach(modelFaces => {
-      // Verificar se o vértice pertence à face
       if (modelFaces.vertices.some(v => v.x === vertex.x && v.y === vertex.y && v.z === vertex.z)) {
         vertexNormal.x += modelFaces.normal.x;
         vertexNormal.y += modelFaces.normal.y;
@@ -553,18 +655,16 @@ function calculateVertexNormal(vertex, faces) {
   };
 
   const calculateZValue = (x, y, p0, p1, p2) => {
-    // Calculate barycentric coordinates
     const denominator = (p1.y - p2.y) * (p0.x - p2.x) + (p2.x - p1.x) * (p0.y - p2.y);
     const u = ((p1.y - p2.y) * (x - p2.x) + (p2.x - p1.x) * (y - p2.y)) / denominator;
     const v = ((p2.y - p0.y) * (x - p2.x) + (p0.x - p2.x) * (y - p2.y)) / denominator;
     const w = 1 - u - v;
 
-    // Interpolate z-value
+    // znterpolate z-value
     return u * p0.z + v * p1.z + w * p2.z;
   };
 
   const isPointInsideTriangle = (x, y, p0, p1, p2, p3) => {
-    // Using barycentric coordinates (you can use other methods too)
     const denominator = (p1.y - p2.y) * (p0.x - p2.x) + (p2.x - p1.x) * (p0.y - p2.y);
     const a = ((p1.y - p2.y) * (x - p2.x) + (p2.x - p1.x) * (y - p2.y)) / denominator;
     const b = ((p2.y - p0.y) * (x - p2.x) + (p0.x - p2.x) * (y - p2.y)) / denominator;
@@ -612,7 +712,7 @@ function calculateVertexNormal(vertex, faces) {
     vertices.forEach((slice) => {
       slice.forEach((point) => {
         const translatedPoint = translate(point, -centroid.x, -centroid.y, -centroid.z);
-        Object.assign(point, translatedPoint); // Atualiza os valores do ponto original
+        Object.assign(point, translatedPoint);
       });
     });
     return translateModelToOriginAndApplyTransformations(vertices, centroid);
@@ -629,12 +729,24 @@ function calculateVertexNormal(vertex, faces) {
     setter(prev => ({ ...prev, intensity: { ...prev.intensity, [component]: value } }));
   };
 
+  const handleVector3Change = (setter, component, value) => {
+    setter(prev => ({ ...prev, [component]: parseFloat(value) }));
+  };
+
+  const handleWindowChange = (axis, minMax, value) => {
+    setWindow(prev => ({ ...prev, [axis]: { ...prev[axis], [minMax]: parseFloat(value) } }));
+  };
+
+  const handleViewportChange = (axis, minMax, value) => {
+    setViewport(prev => ({ ...prev, [axis]: { ...prev[axis], [minMax]: parseInt(value) } }));
+  };
+
   const handleMaterialChange = (modelIndex, component, property, value) => {
     setMaterials(prevMaterials => {
       const updatedMaterials = [...prevMaterials];
       updatedMaterials[modelIndex] = {
         ...updatedMaterials[modelIndex],
-        [component]: { ...updatedMaterials[modelIndex][component], [property]: value }
+        [component]: { ...updatedMaterials[modelIndex][component], [property]: parseFloat(value) }
       };
       return updatedMaterials;
     });
@@ -669,63 +781,147 @@ function calculateVertexNormal(vertex, faces) {
             <option value="wireframe">Wireframe</option>
             <option value="constant">Constant Shading</option>
             <option value="gouraud">Gouraud Shading</option>
-
+            <option value="phong">Phong Shading</option>
           </select>
         </div>
         <div>
+        <h3>Transformations</h3>
+        <div>
+          <label>Translate X: </label>
+          <input
+            type="range"
+            min="-100"
+            max="100"
+            value={transform.translate.x}
+            onChange={(e) => dispatchTransform({ type: 'translateX', value: parseInt(e.target.value) })}
+          />
+          <span>{transform.translate.x}</span>
+        </div>
+        <div>
+          <label>Translate Y: </label>
+          <input
+            type="range"
+            min="-100"
+            max="100"
+            value={transform.translate.y}
+            onChange={(e) => dispatchTransform({ type: 'translateY', value: parseInt(e.target.value) })}
+          />
+          <span>{transform.translate.y}</span>
+        </div>
+        <div>
+          <label>Translate Z: </label>
+          <input
+            type="range"
+            min="-100"
+            max="100"
+            value={transform.translate.z}
+            onChange={(e) => dispatchTransform({ type: 'translateZ', value: parseInt(e.target.value) })}
+          />
+          <span>{transform.translate.z}</span>
+          <input
+            type="number"
+            value={transform.translate.z}
+            onChange={(e) => dispatchTransform({ type: 'translateZ', value: parseInt(e.target.value) })}
+          />
+        </div>
+        <div>
+          <label>Rotate X: </label>
+          <input
+            type="range"
+            min="-180"
+            max="180"
+            value={transform.rotate.x}
+            onChange={(e) => dispatchTransform({ type: 'rotateX', value: parseInt(e.target.value) })}
+          />
+          <span>{transform.rotate.x}º</span>
+        </div>
+        <div>
+          <label>Rotate Y: </label>
+          <input
+            type="range"
+            min="-180"
+            max="180"
+            value={transform.rotate.y}
+            onChange={(e) => dispatchTransform({ type: 'rotateY', value: parseInt(e.target.value) })}
+          />
+          <span>{transform.rotate.y}º</span>
+        </div>
+        <div>
+          <label>Rotate Z: </label>
+          <input
+            type="range"
+            min="-180"
+            max="180"
+            value={transform.rotate.z}
+            onChange={(e) => dispatchTransform({ type: 'rotateZ', value: parseInt(e.target.value) })}
+          />
+          <span>{transform.rotate.z}º</span>
+        </div>
+        <div>
+          <label>Scale: </label>
+          <input
+            type="range"
+            min="0.1"
+            max="3"
+            step="0.1"
+            value={transform.scale}
+            onChange={(e) => dispatchTransform({ type: 'scale', value: parseFloat(e.target.value) })}
+          />
+          <span>{transform.scale}x</span>
+        </div>
+        </div>
+        <div>
         <h3>Camera</h3>
+        <div>
           <h4>VRP</h4>
-            <label>X</label>
-              <input
-                type="number"
-                min="-1000"
-                max="1000"
-                value={focalPoint.x}
-                onChange={(e) => setVRP(  { ...focalPoint, x: parseInt(e.target.value)})}
-              />
-            <label>Y</label>
-              <input
-                type="number"
-                min="-1000"
-                max="1000"
-                value={VRP.y}
-                onChange={(e) => setVRP(  { ...VRP, y: parseInt(e.target.value)})}
-              />
-            <label>Z</label>
-              <input
-                type="number"
-                min="-1000"
-                max="1000"
-                value={VRP.z}
-                onChange={(e) => setVRP(  { ...VRP, z: parseInt(e.target.value)})}
-              />
+          <label>X:</label>
+          <input type="number" value={VRP.x} onChange={(e) => handleVector3Change(setVRP, 'x', e.target.value)} />
+          <label>Y:</label>
+          <input type="number" value={VRP.y} onChange={(e) => handleVector3Change(setVRP, 'y', e.target.value)} />
+          <label>Z:</label>
+          <input type="number" value={VRP.z} onChange={(e) => handleVector3Change(setVRP, 'z', e.target.value)} />
+        </div>
+        <div>
           <h4>Focal Point</h4>
-            <div>
-            <label>X</label>
-              <input
-                type="number"
-                min="-1000"
-                max="1000"
-                value={focalPoint.x}
-                onChange={(e) => setFocalPoint(  { ...focalPoint, x: parseInt(e.target.value)})}
-              />
-            <label>Y</label>
-              <input
-                type="number"
-                min="-1000"
-                max="1000"
-                value={focalPoint.y}
-                onChange={(e) => setFocalPoint(  { ...focalPoint, y: parseInt(e.target.value)})}
-              />
-            <label>Z</label>
-              <input
-                type="number"
-                min="-1000"
-                max="1000"
-                value={focalPoint.z}
-                onChange={(e) => setFocalPoint(  { ...focalPoint, z: parseInt(e.target.value)})}
-              />
-            </div>
+          <label>X:</label>
+          <input type="number" value={focalPoint.x} onChange={(e) => handleVector3Change(setFocalPoint, 'x', e.target.value)} />
+          <label>Y:</label>
+          <input type="number" value={focalPoint.y} onChange={(e) => handleVector3Change(setFocalPoint, 'y', e.target.value)} />
+          <label>Z:</label>
+          <input type="number" value={focalPoint.z} onChange={(e) => handleVector3Change(setFocalPoint, 'z', e.target.value)} />
+        </div>
+        <div>
+          <h4>Distance</h4>
+          <input type="number" value={distance} onChange={(e) => setDistance(parseFloat(e.target.value))} />
+        </div>
+        <div>
+          <h4>View Up</h4>
+          <label>X:</label>
+          <input type="number" value={viewUp.x} onChange={(e) => handleVector3Change(setViewUp, 'x', e.target.value)} />
+          <label>Y:</label>
+          <input type="number" value={viewUp.y} onChange={(e) => handleVector3Change(setViewUp, 'y', e.target.value)} />
+          <label>Z:</label>
+          <input type="number" value={viewUp.z} onChange={(e) => handleVector3Change(setViewUp, 'z', e.target.value)} />
+        </div>
+
+        <h3>Window</h3>
+        <div>
+          <h4>X</h4>
+          <label>Min:</label>
+          <input type="number" value={window.x.min} onChange={(e) => handleWindowChange('x', 'min', e.target.value)} />
+          <label>Max:</label>
+          <input type="number" value={window.x.max} onChange={(e) => handleWindowChange('x', 'max', e.target.value)} />
+        </div>
+        {/* Repetir para Y e Z */}
+
+        <h3>Viewport</h3>
+        <div>
+          <h4>U</h4>
+          <label>Min:</label>
+          <input type="number" value={viewport.u.min} onChange={(e) => handleViewportChange('u', 'min', e.target.value)} />
+          <label>Max:</label>
+          <input type="number" value={viewport.u.max} onChange={(e) => handleViewportChange('u', 'max', e.target.value)} />
+        </div>
         </div>
         <h3>Light Source</h3>
         <div>
@@ -814,92 +1010,7 @@ function calculateVertexNormal(vertex, faces) {
           </div>
         ))}
         </div>
-        <div>
-          <h3>Transformations</h3>
-          <div>
-            <label>Translate X: </label>
-            <input
-              type="range"
-              min="-100"
-              max="100"
-              value={transform.translate.x}
-              onChange={(e) => dispatchTransform({ type: 'translateX', value: parseInt(e.target.value) })}
-            />
-            <span>{transform.translate.x}</span>
-          </div>
-          <div>
-            <label>Translate Y: </label>
-            <input
-              type="range"
-              min="-100"
-              max="100"
-              value={transform.translate.y}
-              onChange={(e) => dispatchTransform({ type: 'translateY', value: parseInt(e.target.value) })}
-            />
-            <span>{transform.translate.y}</span>
-          </div>
-          <div>
-            <label>Translate Z: </label>
-            <input
-              type="range"
-              min="-100"
-              max="100"
-              value={transform.translate.z}
-              onChange={(e) => dispatchTransform({ type: 'translateZ', value: parseInt(e.target.value) })}
-            />
-            <span>{transform.translate.z}</span>
-            <input
-              type="number"
-              value={transform.translate.z}
-              onChange={(e) => dispatchTransform({ type: 'translateZ', value: parseInt(e.target.value) })}
-            />
-          </div>
-          <div>
-            <label>Rotate X: </label>
-            <input
-              type="range"
-              min="-180"
-              max="180"
-              value={transform.rotate.x}
-              onChange={(e) => dispatchTransform({ type: 'rotateX', value: parseInt(e.target.value) })}
-            />
-            <span>{transform.rotate.x}º</span>
-          </div>
-          <div>
-            <label>Rotate Y: </label>
-            <input
-              type="range"
-              min="-180"
-              max="180"
-              value={transform.rotate.y}
-              onChange={(e) => dispatchTransform({ type: 'rotateY', value: parseInt(e.target.value) })}
-            />
-            <span>{transform.rotate.y}º</span>
-          </div>
-          <div>
-            <label>Rotate Z: </label>
-            <input
-              type="range"
-              min="-180"
-              max="180"
-              value={transform.rotate.z}
-              onChange={(e) => dispatchTransform({ type: 'rotateZ', value: parseInt(e.target.value) })}
-            />
-            <span>{transform.rotate.z}º</span>
-          </div>
-          <div>
-            <label>Scale: </label>
-            <input
-              type="range"
-              min="0.1"
-              max="3"
-              step="0.1"
-              value={transform.scale}
-              onChange={(e) => dispatchTransform({ type: 'scale', value: parseFloat(e.target.value) })}
-            />
-            <span>{transform.scale}x</span>
-          </div>
-        </div>
+
       </div>
       <div className="main">
         <canvas ref={canvas3DRef} width={viewport.u.max} height={viewport.v.max} style={{ border: '1px solid black' }} />
