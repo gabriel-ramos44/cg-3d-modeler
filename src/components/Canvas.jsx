@@ -166,14 +166,24 @@ const Canvas = () => {
 
           const normal = calculateNormal(p0, p1, p2);
 
-          const face = {
-              vertices: [p0, p1, p2, p3],
+          const face1 = {
+              vertices: [p0, p1, p2],
               centroid: centroid,
               depth: centroid.z,
-              normal: normal, // Store normal with the face
+              normal: normal,
           };
-          if (isFaceVisible(face.centroid, face.normal, VRP))
-          newFaces.push(face);
+
+         const face2 ={
+              vertices: [p0, p2, p3],
+              centroid: centroid,
+              depth: centroid.z,
+              normal: normal,
+        };
+
+          if (isFaceVisible(face1.centroid, face1.normal, VRP)){
+          newFaces.push(face1);
+          newFaces.push(face2);
+        }
       }
     }
     return newFaces;
@@ -328,42 +338,40 @@ const Canvas = () => {
 
   const drawFaces = (ctx, faces, width, height) => {
     faces.forEach(face => {
-        const [p0, p1, p2, p3] = face.vertices;
+        const [p0, p1, p2] = face.vertices;
 
         // Calculate color using flat shading
         const color = calculateFlatShading(face, lightSource, { Kd: { r: 0.8, g: 0.5, b: 0.3 } });
 
-        ctx.strokeStyle = `rgb(0, 50, 255)`;
-        ctx.fillStyle = `rgb(255, 255, 255, 0)`;
         if (renderMode === 'wireframe') {
+          ctx.strokeStyle = `rgb(0, 50, 255)`;
+          ctx.fillStyle = `rgb(255, 255, 255, 0)`;
           ctx.beginPath();
           ctx.moveTo(p0.x, p0.y);
           ctx.lineTo(p1.x, p1.y);
           ctx.lineTo(p2.x, p2.y);
-          ctx.lineTo(p3.x, p3.y);
           ctx.closePath();
           ctx.stroke();
         }
         else if (renderMode === 'constant') {
           const color = calculateFlatShading(face, lightSource, { Kd: { r: 0.8, g: 0.5, b: 0.3 } });
-          drawPolygon(ctx, p0, p1, p2, p3, color, zBuffer);
+          drawPolygon(ctx, p0, p1, p2, color, zBuffer);
         }
     });
 };
 
-  const drawPolygon = (ctx, p0, p1, p2, p3, color, zBuffer) => {
-    const minX = Math.min(p0.x, p1.x, p2.x, p3.x);
-    const maxX = Math.max(p0.x, p1.x, p2.x, p3.x);
-    const minY = Math.min(p0.y, p1.y, p2.y, p3.y);
-    const maxY = Math.max(p0.y, p1.y, p2.y, p3.y);
+  const drawPolygon = (ctx, p0, p1, p2, color, zBuffer) => {
+    const minX = Math.min(p0.x, p1.x, p2.x);
+    const maxX = Math.max(p0.x, p1.x, p2.x);
+    const minY = Math.min(p0.y, p1.y, p2.y);
+    const maxY = Math.max(p0.y, p1.y, p2.y);
 
     for (let x = Math.floor(minX); x <= Math.ceil(maxX); x++) {
       for (let y = Math.floor(minY); y <= Math.ceil(maxY); y++) {
-        if (isPointInsideTriangle(x, y, p0, p1, p2, p3)) {
-          // Perform depth test
-          const z = calculateZValue(x, y, p0, p1, p2); // You'll need to implement this
+        if (isPointInsideTriangle(x, y, p0, p1, p2)) {
+          const z = calculateZValue(x, y, p0, p1, p2);
           if (z < zBuffer[x][y]) {
-            zBuffer[x][y] = z; // Update z-buffer
+            zBuffer[x][y] = z;
             ctx.fillStyle = `rgb(${color.r}, ${color.g}, ${color.b})`;
             ctx.fillRect(x, y, 1, 1);
           }
