@@ -46,6 +46,13 @@ const transformReducer = (state, action) => {
   }
 };
 
+const defaultMaterial = {
+  Ka: { r: 0.2, g: 0.2, b: 0.2 },
+  Kd: { r: 0.8, g: 0.8, b: 0.8 },
+  Ks: { r: 0.5, g: 0.5, b: 0.5 },
+  shininess: 32
+};
+
 const Canvas = () => {
   const canvas2DRef = useRef(null);
   const canvas3DRef = useRef(null);
@@ -72,12 +79,7 @@ const Canvas = () => {
     intensity: { r: 50, g: 50, b: 50 }
   });
 
-  const [material, setMaterial] = useState({
-    Ka: { r: 0.2, g: 0.2, b: 0.2 },
-    Kd: { r: 0.8, g: 0.8, b: 0.8 },
-    Ks: { r: 0.5, g: 0.5, b: 0.5 },
-    shininess: 32                  // Specular exponent
-  });
+  const [materials, setMaterials] = useState([]);
 
   const  [viewUp, setViewUp]  = useState(cameraInitialState.viewUp)
 
@@ -311,8 +313,8 @@ const Canvas = () => {
 
     clearZBuffer();
 
-    sortedModels.forEach((model) => {
-      drawFaces(ctx, model.faces, width, height);
+    sortedModels.forEach((model, modelIndex) => {
+      drawFaces(ctx, model.faces, width, height, modelIndex);
     });
   };
 
@@ -330,6 +332,7 @@ const Canvas = () => {
     const V = normalize(subtractVectors(VRP, centroid)); // Viewer direction (from centroid to VRP)
 
     const dotProductLN = dotProduct(N, L);
+    console.log(material)
 
     let Ia = {
       r: ambient.intensity.r * material.Ka.r,
@@ -379,16 +382,17 @@ const Canvas = () => {
 
     const updatedModels = [...models, newModel];
     setModels(updatedModels);
+
+    setMaterials(prevMaterials => [...prevMaterials, { ...defaultMaterial }])
     startCreatingNewModel();
   };
 
 
-  const drawFaces = (ctx, faces, width, height) => {
+  const drawFaces = (ctx, faces, width, height, modelIndex) => {
     faces.forEach(face => {
         const [p0, p1, p2] = face.vertices;
 
         // Calculate color using flat shading
-
 
         if (renderMode === 'wireframe') {
           ctx.strokeStyle = `rgb(0, 50, 255)`;
@@ -401,7 +405,10 @@ const Canvas = () => {
           ctx.stroke();
         }
         else if (renderMode === 'constant') {
-          const color = calculateFlatShading(face, lightSource, ambientLight, material);
+          //const color = calculateFlatShading(face, lightSource, ambientLight, materials[modelIndex]);
+          console.log(materials)
+          console.log(modelIndex)
+          const color = calculateFlatShading(face, lightSource, ambientLight, materials[modelIndex]);
           drawPolygon(ctx, p0, p1, p2, color, zBuffer);
         }
     });
@@ -504,8 +511,15 @@ const Canvas = () => {
     setter(prev => ({ ...prev, intensity: { ...prev.intensity, [component]: value } }));
   };
 
-  const handleMaterialChange = (component, property, value) => {
-    setMaterial(prev => ({ ...prev, [component]: { ...prev[component], [property]: value } }));
+  const handleMaterialChange = (modelIndex, component, property, value) => {
+    setMaterials(prevMaterials => {
+      const updatedMaterials = [...prevMaterials];
+      updatedMaterials[modelIndex] = {
+        ...updatedMaterials[modelIndex],
+        [component]: { ...updatedMaterials[modelIndex][component], [property]: value }
+      };
+      return updatedMaterials;
+    });
   };
 
   return (
@@ -622,10 +636,63 @@ const Canvas = () => {
 
         <h3>Material</h3>
         <div>
-          <label>Ka (R, G, B):</label>
-          <input type="number" min="0" max="1" step="0.1" value={material.Ka.r} onChange={(e) => handleMaterialChange('Ka', 'r', parseFloat(e.target.value))} />
-          <input type="number" min="0" max="1" step="0.1" value={material.Ka.g} onChange={(e) => handleMaterialChange('Ka', 'g', parseFloat(e.target.value))} />
-          <input type="number" min="0" max="1" step="0.1" value={material.Ka.b} onChange={(e) => handleMaterialChange('Ka', 'b', parseFloat(e.target.value))} />
+{/* Material Editing Section (dynamically render for each model) */}
+{models.map((model, modelIndex) => (
+          <div key={modelIndex}>
+            <h3>Material for Model {modelIndex + 1}</h3>
+
+            {/* Ambient Reflectivity (Ka) */}
+            <div>
+              <label>Ka (R, G, B):</label>
+              <input type="number" min="0" max="1" step="0.1"
+                     value={materials[modelIndex].Ka.r}
+                     onChange={(e) => handleMaterialChange(modelIndex, 'Ka', 'r', parseFloat(e.target.value))} />
+              <input type="number" min="0" max="1" step="0.1"
+                     value={materials[modelIndex].Ka.g}
+                     onChange={(e) => handleMaterialChange(modelIndex, 'Ka', 'g', parseFloat(e.target.value))} />
+              <input type="number" min="0" max="1" step="0.1"
+                     value={materials[modelIndex].Ka.b}
+                     onChange={(e) => handleMaterialChange(modelIndex, 'Ka', 'b', parseFloat(e.target.value))} />
+            </div>
+
+            {/* Diffuse Reflectivity (Kd) */}
+            <div>
+              <label>Kd (R, G, B):</label>
+              <input type="number" min="0" max="1" step="0.1"
+                     value={materials[modelIndex].Kd.r}
+                     onChange={(e) => handleMaterialChange(modelIndex, 'Kd', 'r', parseFloat(e.target.value))} />
+              <input type="number" min="0" max="1" step="0.1"
+                     value={materials[modelIndex].Kd.g}
+                     onChange={(e) => handleMaterialChange(modelIndex, 'Kd', 'g', parseFloat(e.target.value))} />
+              <input type="number" min="0" max="1" step="0.1"
+                     value={materials[modelIndex].Kd.b}
+                     onChange={(e) => handleMaterialChange(modelIndex, 'Kd', 'b', parseFloat(e.target.value))} />
+            </div>
+
+            {/* Specular Reflectivity (Ks) */}
+            <div>
+              <label>Ks (R, G, B):</label>
+              <input type="number" min="0" max="1" step="0.1"
+                     value={materials[modelIndex].Ks.r}
+                     onChange={(e) => handleMaterialChange(modelIndex, 'Ks', 'r', parseFloat(e.target.value))} />
+              <input type="number" min="0" max="1" step="0.1"
+                     value={materials[modelIndex].Ks.g}
+                     onChange={(e) => handleMaterialChange(modelIndex, 'Ks', 'g', parseFloat(e.target.value))} />
+              <input type="number" min="0" max="1" step="0.1"
+                     value={materials[modelIndex].Ks.b}
+                     onChange={(e) => handleMaterialChange(modelIndex, 'Ks', 'b', parseFloat(e.target.value))} />
+            </div>
+
+            {/* Shininess (n) */}
+            <div>
+              <label>Shininess:</label>
+              <input type="number" min="1" max="128"
+                     value={materials[modelIndex].shininess}
+                     onChange={(e) => handleMaterialChange(modelIndex, 'shininess', null, parseInt(e.target.value))} />
+            </div>
+
+          </div>
+        ))}
         </div>
         <div>
           <h3>Transformations</h3>

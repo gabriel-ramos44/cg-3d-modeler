@@ -10,7 +10,7 @@ An elementary 3D modeler, where object modeling is performed using the revolutio
 
 - [x] Geometrically transform the object by applying translations and rotations along the x, y, and z axes. Additionally, perform uniform scaling with the same factor across all three axes.
 
-- [ ] Display the 3D object using constant shading, incorporating surface occlusion (including the z-buffer algorithm).
+- [x] Display the 3D object using constant shading, incorporating surface occlusion (including the z-buffer algorithm).
 
 - [ ] Present the 3D object using Gouraud shading, again with surface occlusion (including the z-buffer algorithm).
 
