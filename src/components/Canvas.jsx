@@ -335,7 +335,6 @@ const Canvas = () => {
         ctx.strokeStyle = `rgb(0, 50, 255)`;
         ctx.fillStyle = `rgb(255, 255, 255, 0)`;
 
-        if (isFaceVisible(face.centroid, face.normal, VRP)) {
             /*ctx.beginPath();
             ctx.moveTo(pp0.x, p0.y);
             ctx.lineTo(pp1.x, p1.y);
@@ -345,7 +344,6 @@ const Canvas = () => {
             ctx.fill();
             ctx.stroke();*/
             drawPolygon(ctx, p0, p1, p2, p3, color, zBuffer);
-        }
     });
 };
 
