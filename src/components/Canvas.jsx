@@ -64,6 +64,8 @@ const Canvas = () => {
 
   const  [viewUp, setViewUp]  = useState(cameraInitialState.viewUp)
 
+  const [renderMode, setRenderMode] = useState('wireframe')
+
   const [zBuffer, setZBuffer] = useState([]);
   const lightSource = { position: { x: 100, y: 100, z: 200 }, intensity: { r: 255, g: 255, b: 255 } };
 
@@ -197,7 +199,7 @@ const Canvas = () => {
 
   useEffect(() => {
     drawScene(models);
-  }, [models, projectionType]);
+  }, [models, projectionType, renderMode]);
 
   const handleModelSelect = (index) => {
     setSelectedModelIndex(index);
@@ -325,7 +327,6 @@ const Canvas = () => {
 
 
   const drawFaces = (ctx, faces, width, height) => {
-    // Desenhar as faces na ordem ordenada
     faces.forEach(face => {
         const [p0, p1, p2, p3] = face.vertices;
 
@@ -334,16 +335,19 @@ const Canvas = () => {
 
         ctx.strokeStyle = `rgb(0, 50, 255)`;
         ctx.fillStyle = `rgb(255, 255, 255, 0)`;
-
-            /*ctx.beginPath();
-            ctx.moveTo(pp0.x, p0.y);
-            ctx.lineTo(pp1.x, p1.y);
-            ctx.lineTo(pp2.x, p2.y);
-            ctx.lineTo(pp3.x, p3.y);
-            ctx.closePath();
-            ctx.fill();
-            ctx.stroke();*/
-            drawPolygon(ctx, p0, p1, p2, p3, color, zBuffer);
+        if (renderMode === 'wireframe') {
+          ctx.beginPath();
+          ctx.moveTo(p0.x, p0.y);
+          ctx.lineTo(p1.x, p1.y);
+          ctx.lineTo(p2.x, p2.y);
+          ctx.lineTo(p3.x, p3.y);
+          ctx.closePath();
+          ctx.stroke();
+        }
+        else if (renderMode === 'constant') {
+          const color = calculateFlatShading(face, lightSource, { Kd: { r: 0.8, g: 0.5, b: 0.3 } });
+          drawPolygon(ctx, p0, p1, p2, p3, color, zBuffer);
+        }
     });
 };
 
@@ -462,6 +466,13 @@ const Canvas = () => {
           <select value={projectionType} onChange={(e) => setProjectionType(e.target.value)}>
             <option value="parallel">Parallel</option>
             <option value="perspective">Perspective</option>
+          </select>
+        </div>
+        <div>
+          <label>Render Mode:</label>
+          <select value={renderMode} onChange={(e) => setRenderMode(e.target.value)}>
+            <option value="constant">Constant Shading</option>
+            <option value="wireframe">Wireframe</option>
           </select>
         </div>
         <div>
