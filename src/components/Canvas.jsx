@@ -332,7 +332,6 @@ const Canvas = () => {
     const V = normalize(subtractVectors(VRP, centroid)); // Viewer direction (from centroid to VRP)
 
     const dotProductLN = dotProduct(N, L);
-    console.log(material)
 
     let Ia = {
       r: ambient.intensity.r * material.Ka.r,
@@ -391,7 +390,6 @@ const Canvas = () => {
   const drawFaces = (ctx, faces, width, height, modelIndex) => {
     faces.forEach(face => {
         const [p0, p1, p2] = face.vertices;
-
         // Calculate color using flat shading
 
         if (renderMode === 'wireframe') {
@@ -406,13 +404,133 @@ const Canvas = () => {
         }
         else if (renderMode === 'constant') {
           //const color = calculateFlatShading(face, lightSource, ambientLight, materials[modelIndex]);
-          console.log(materials)
-          console.log(modelIndex)
           const color = calculateFlatShading(face, lightSource, ambientLight, materials[modelIndex]);
           drawPolygon(ctx, p0, p1, p2, color, zBuffer);
         }
+        else if (renderMode === 'gouraud') {
+          const verticesWithColors = []
+          face.vertices.forEach(vertice => {
+            const verticeNormal = calculateVertexNormal(vertice, faces)
+            const color = calculateGouraudShading(verticeNormal, vertice, lightSource, ambientLight, materials[modelIndex])
+
+            verticesWithColors.push(
+              {
+                x: vertice.x,
+                y: vertice.y,
+                z: vertice.z,
+                color: { // Add color as an object
+                  r: color.r,
+                  g: color.g,
+                  b: color.b,
+                }
+                }
+            )
+        });
+          drawPolygonWithColorInterpolation(ctx, verticesWithColors[0], verticesWithColors[1], verticesWithColors[2], zBuffer)
+        }
+        else if (renderMode === 'phong') {
+
+        }
     });
 };
+
+const drawPolygonWithColorInterpolation = (ctx, p0, p1, p2, zBuffer) => {
+  const minX = Math.min(p0.x, p1.x, p2.x);
+  const maxX = Math.max(p0.x, p1.x, p2.x);
+  const minY = Math.min(p0.y, p1.y, p2.y);
+  const maxY = Math.max(p0.y, p1.y, p2.y);
+
+  for (let x = Math.floor(minX); x <= Math.ceil(maxX); x++) {
+    for (let y = Math.floor(minY); y <= Math.ceil(maxY); y++) {
+      if (isPointInsideTriangle(x, y, p0, p1, p2)) {
+        const z = calculateZValue(x, y, p0, p1, p2);
+        if (z < zBuffer[x][y]) {
+          zBuffer[x][y] = z;
+          const color = interpolateColor(x, y, p0, p1, p2);
+          ctx.fillStyle = `rgb(${Math.round(color.r)}, ${Math.round(color.g)}, ${Math.round(color.b)})`;
+          ctx.fillRect(x, y, 1, 1);
+        }
+      }
+    }
+  }
+};
+
+const interpolateColor = (x, y, p0, p1, p2) => {
+  // Barycentric coordinates calculation
+  const denom = (p1.y - p2.y) * (p0.x - p2.x) + (p2.x - p1.x) * (p0.y - p2.y);
+  const w1 = ((p1.y - p2.y) * (x - p2.x) + (p2.x - p1.x) * (y - p2.y)) / denom;
+  const w2 = ((p2.y - p0.y) * (x - p2.x) + (p0.x - p2.x) * (y - p2.y)) / denom;
+  const w3 = 1 - w1 - w2;
+
+  // Interpolating the color
+  const r = w1 * p0.color.r + w2 * p1.color.r + w3 * p2.color.r;
+  const g = w1 * p0.color.g + w2 * p1.color.g + w3 * p2.color.g;
+  const b = w1 * p0.color.b + w2 * p1.color.b + w3 * p2.color.b;
+
+  return { r, g, b };
+};
+
+
+
+const calculateGouraudShading = (vertexNormal, vertex, light, ambient, material) => {
+  const N = vertexNormal;
+  const L = normalize(subtractVectors(light.position, vertex));
+  const V = normalize(subtractVectors(VRP, vertex)); // Viewer direction (from centroid to VRP)
+
+  const dotProductLN = dotProduct(N, L);
+
+  let Ia = {
+    r: ambient.intensity.r * material.Ka.r,
+    g: ambient.intensity.g * material.Ka.g,
+    b: ambient.intensity.b * material.Ka.b
+  };
+
+  // Diffuse component
+  let Id = { r: 0, g: 0, b: 0 };
+  if (dotProductLN > 0) {
+    Id = {
+      r: light.intensity.r * material.Kd.r * dotProductLN,
+      g: light.intensity.g * material.Kd.g * dotProductLN,
+      b: light.intensity.b * material.Kd.b * dotProductLN
+    };
+  }
+
+  // Specular component
+  let Is = { r: 0, g: 0, b: 0 };
+  if (dotProductLN > 0) { // Only calculate specular if surface is facing the light
+    const R = normalize(subtractVectors(vectorByScalar(N, 2 * dotProductLN), L)); // Reflection vector
+    const dotProductRV = Math.max(dotProduct(R, V), 0); // Ensure non-negative
+    const specularIntensity = Math.pow(dotProductRV, material.shininess);
+    Is = {
+      r: light.intensity.r * material.Ks.r * specularIntensity,
+      g: light.intensity.g * material.Ks.g * specularIntensity,
+      b: light.intensity.b * material.Ks.b * specularIntensity
+    };
+  }
+
+  // Combine components
+  let color = {
+    r: Math.min(Ia.r + Id.r + Is.r, 255), // Clamp to 255
+    g: Math.min(Ia.g + Id.g + Is.g, 255),
+    b: Math.min(Ia.b + Id.b + Is.b, 255)
+  };
+  return color;
+};
+
+function calculateVertexNormal(vertex, faces) {
+  let vertexNormal = { x: 0, y: 0, z: 0 };
+  faces.forEach(modelFaces => {
+      // Verificar se o vértice pertence à face
+      if (modelFaces.vertices.some(v => v.x === vertex.x && v.y === vertex.y && v.z === vertex.z)) {
+        vertexNormal.x += modelFaces.normal.x;
+        vertexNormal.y += modelFaces.normal.y;
+        vertexNormal.z += modelFaces.normal.z;
+      }
+
+  });
+
+  return normalize(vertexNormal);
+}
 
   const drawPolygon = (ctx, p0, p1, p2, color, zBuffer) => {
     const minX = Math.min(p0.x, p1.x, p2.x);
@@ -548,8 +666,10 @@ const Canvas = () => {
         <div>
           <label>Render Mode:</label>
           <select value={renderMode} onChange={(e) => setRenderMode(e.target.value)}>
-            <option value="constant">Constant Shading</option>
             <option value="wireframe">Wireframe</option>
+            <option value="constant">Constant Shading</option>
+            <option value="gouraud">Gouraud Shading</option>
+
           </select>
         </div>
         <div>
