@@ -1,4 +1,4 @@
-import React, { useRef, useState, useEffect, useReducer } from 'react';
+import React, { useRef, useState, useEffect, useReducer, useMemo } from 'react';
 import './Canvas.css';
 import { translate, rotateX, rotateY, rotateZ, scale } from '../utils/Transformations';
 import { calculateNormal, isFaceVisible,  } from '../utils/Operations';
@@ -19,7 +19,8 @@ const cameraInitialState = {
   focalPoint: { x: 0, y: 0, z: 0 }, // P
   distance: 500,
   window:  {x:{min: 0, max: 500}, y:{min: 0, max: 500}, z:{min: 0, max: 1000} },
-  viewport:  {u:{min: 0, max: 900}, v:{min: 0, max:900}}
+  viewport:  {u:{min: 0, max: 900}, v:{min: 0, max:900}},
+  viewUp: { x: 0, y: 1, z: 0 }
 };
 
 const transformReducer = (state, action) => {
@@ -61,7 +62,7 @@ const Canvas = () => {
   const [viewport, setViewport] = useState(cameraInitialState.viewport)
   const [distance, setDistance] = useState(cameraInitialState.distance)
 
-  const viewUp = { x: 0, y: 1, z: 0 }; // Y
+  const  [viewUp, setViewUp]  = useState(cameraInitialState.viewUp)
 
   const [zBuffer, setZBuffer] = useState([]);
   const lightSource = { position: { x: 100, y: 100, z: 200 }, intensity: { r: 255, g: 255, b: 255 } };
@@ -69,25 +70,22 @@ const Canvas = () => {
   const [models, setModels] = useState([]);
   const [selectedModelIndex, setSelectedModelIndex] = useState(null);
 
-  useEffect(() => {
-    draw2DProfile(profile);
-  }, [profile]);
+  const transformationMatrix = useMemo(() => {
 
-  useEffect(() => {
-    drawScene(models);
-  }, [models, projectionType]);
+    // Msru src
+    const cameraMatrix = computeCameraMatrix(VRP, focalPoint, viewUp);
+    // Mjp
+    const viewMatrix = computeViewMatrix(window, viewport);
 
-  const handleModelSelect = (index) => {
-    setSelectedModelIndex(index);
-    const selectedModel = models[index];
-    dispatchTransform({ type: 'reset', value: selectedModel.transform });
-    setProfile(selectedModel.profile);
-  };
+    // Mproj
+    const projectionMatrix = projectionType === 'perspective'
+      ? computePerspectiveProjMatrix(distance)
+      : computeParallelProjectionMatrix(window);
 
-  useEffect(() => {
-    const canvas = canvas3DRef.current;
-    setZBuffer(Array(canvas.width).fill(0).map(() => Array(canvas.height).fill(Infinity)));
-  }, [viewport]);
+    const mJpXmProj = multiplyMatrices(viewMatrix, projectionMatrix);
+    return multiplyMatrices(mJpXmProj, cameraMatrix);
+
+  }, [VRP, focalPoint, viewUp, window, viewport, projectionType, distance]);
 
 
   const applyCameraTransform = (modelVertices, cameraMatrix) => {
@@ -113,6 +111,108 @@ const Canvas = () => {
     ];
     return result;
   };
+
+  const calculateCentroid = (vertices) => {
+    let sumX = 0;
+    let sumY = 0;
+    let sumZ = 0;
+
+    vertices.forEach((slice) => {
+      slice.forEach((point) => {
+        sumX += point.x;
+        sumY += point.y;
+        sumZ += point.z;
+      });
+    });
+
+    const totalPoints = vertices.length * vertices[0].length;
+    return {
+      x: sumX / totalPoints,
+      y: sumY / totalPoints,
+      z: sumZ / totalPoints,
+    };
+  };
+
+  const centralizePointOnCanva = (p) => {
+    const X = (viewport.u.max + viewport.u.min) / 2;
+    const Y = (viewport.v.max + viewport.v.min) / 2;
+
+    return {
+      x: p[0] + X,
+      y: -p[1] + Y,
+      z: p[2],
+    };
+  }
+
+  const generateFaces = (model) => {
+    const newFaces = [];
+    for (let i = 0; i < model.length; i++) {
+      const currentSlice = model[i];
+      const nextSlice = model[(i + 1) % model.length];
+
+      for (let j = 0; j < currentSlice.length - 1; j++) {
+          const p0 = currentSlice[j];
+          const p1 = currentSlice[j + 1];
+          const p2 = nextSlice[j + 1];
+          const p3 = nextSlice[j];
+
+          const centroid = {
+              x: (p0.x + p1.x + p2.x + p3.x) / 4,
+              y: (p0.y + p1.y + p2.y + p3.y) / 4,
+              z: (p0.z + p1.z + p2.z + p3.z) / 4,
+          };
+
+          const normal = calculateNormal(p0, p1, p2);
+
+          const face = {
+              vertices: [p0, p1, p2, p3],
+              centroid: centroid,
+              depth: centroid.z,
+              normal: normal, // Store normal with the face
+          };
+
+          newFaces.push(face);
+      }
+    }
+    return newFaces;
+};
+
+  const memoizedCentroids = useMemo(() => {
+    return models.map(model => {
+      const transformedVertices = applyCameraTransform(model.vertices, transformationMatrix);
+      return calculateCentroid(transformedVertices);
+    });
+  }, [models, transformationMatrix]);
+
+  const memoizedFaces = useMemo(() => {
+    return models.map(model => {
+      const transformedVertices = applyCameraTransform(model.vertices, transformationMatrix);
+      return generateFaces(transformedVertices).sort((a, b) => b.depth - a.depth);
+    });
+  }, [models, transformationMatrix]);
+
+  useEffect(() => {
+    draw2DProfile(profile);
+  }, [profile]);
+
+  useEffect(() => {
+    drawScene(models);
+  }, [models, projectionType]);
+
+  const handleModelSelect = (index) => {
+    setSelectedModelIndex(index);
+    const selectedModel = models[index];
+    dispatchTransform({ type: 'reset', value: selectedModel.transform });
+    setProfile(selectedModel.profile);
+  };
+
+  useEffect(() => {
+    const canvas = canvas3DRef.current;
+    setZBuffer(Array(canvas.width).fill(0).map(() => Array(canvas.height).fill(Infinity)));
+  }, [viewport]);
+
+
+
 
 
   const handle2DCanvasClick = (e) => {
@@ -145,27 +245,6 @@ const Canvas = () => {
     ctx.stroke();
   };
 
-  const calculateCentroid = (vertices) => {
-    let sumX = 0;
-    let sumY = 0;
-    let sumZ = 0;
-
-    vertices.forEach((slice) => {
-      slice.forEach((point) => {
-        sumX += point.x;
-        sumY += point.y;
-        sumZ += point.z;
-      });
-    });
-
-    const totalPoints = vertices.length * vertices[0].length;
-    return {
-      x: sumX / totalPoints,
-      y: sumY / totalPoints,
-      z: sumZ / totalPoints,
-    };
-  };
-
   const updateSelectedModel = () => {
     if (selectedModelIndex !== null) {
       const updatedModels = [...models];
@@ -183,16 +262,7 @@ const Canvas = () => {
     }
   };
 
-  const centralizePointOnCanva = (p) => {
-    const X = (viewport.u.max + viewport.u.min) / 2;
-    const Y = (viewport.v.max + viewport.v.min) / 2;
 
-    return {
-      x: p[0] + X,
-      y: -p[1] + Y,
-      z: p[2],
-    };
-  }
 
   const drawScene = (customModels) => {
     const canvas = canvas3DRef.current;
@@ -201,38 +271,24 @@ const Canvas = () => {
     const height = canvas.height;
     ctx.clearRect(0, 0, width, height);
 
-    // Msru src
-    const cameraMatrix = computeCameraMatrix(VRP, focalPoint, viewUp);
-    // Mjp
-    const viewMatrix = computeViewMatrix(window, viewport);
 
-    // Mproj
-    const projectionMatrix = projectionType === 'perspective'
-      ? computePerspectiveProjMatrix(distance)
-      : computeParallelProjectionMatrix(window);
-
-    const mJpXmProj = multiplyMatrices(viewMatrix, projectionMatrix);
-    const SruSrtMatrix = multiplyMatrices(mJpXmProj, cameraMatrix);
-
-    // SRU to SRT
-    const modelsWithTransformedVertices = customModels.map(model => ({
+    const modelsWithTransformedVertices = customModels.map((model, index) => ({
       ...model,
-      vertices: applyCameraTransform(model.vertices, SruSrtMatrix),
+      vertices: applyCameraTransform(model.vertices, transformationMatrix),
+      centroid: memoizedCentroids[index], // Assign memoized centroid
+      faces: memoizedFaces[index]          // Assign memoized faces
     }));
 
-    const modelsWithCentroids = modelsWithTransformedVertices.map((model) => {
-      const centroid = calculateCentroid(model.vertices);
-      return { ...model, centroid };
-    });
-
-    const sortedModels = modelsWithCentroids.sort((a, b) => b.centroid.z - a.centroid.z);
+    const sortedModels = modelsWithTransformedVertices.sort((a, b) => b.centroid.z - a.centroid.z);
 
     clearZBuffer();
 
     sortedModels.forEach((model) => {
-      drawFaces(ctx, model.vertices, width, height);
+      drawFaces(ctx, model.faces, width, height);
     });
   };
+
+
 
   const clearZBuffer = () => {
     const canvas = canvas3DRef.current;
@@ -267,84 +323,28 @@ const Canvas = () => {
     startCreatingNewModel();
   };
 
-  const projectPoint = (p, width, height) => {
-    if (projectionType === 'perspective') {
-      const d = distance//VRP.z;
-      return {
-        x: (p.x * d) / (d + p.z) + width / 2,
-        y: height / 2 - (p.y * d) / (d + p.z),
-      };
-    } else {
-      // parallel projection
-      return {
-        x: p.x + width / 2,
-        y: height / 2 - p.y,
-      };
-    }
-  };
 
-  const drawFaces = (ctx, model, width, height) => {
-    const faces = [];
-
-    // Criar uma lista de faces com seus centroides e profundidade média
-    for (let i = 0; i < model.length; i++) {
-        const currentSlice = model[i];
-        const nextSlice = model[(i + 1) % model.length];
-
-        for (let j = 0; j < currentSlice.length - 1; j++) {
-            const p0 = currentSlice[j];
-            const p1 = currentSlice[j + 1];
-            const p2 = nextSlice[j + 1];
-            const p3 = nextSlice[j];
-
-            const centroid = {
-                x: (p0.x + p1.x + p2.x + p3.x) / 4,
-                y: (p0.y + p1.y + p2.y + p3.y) / 4,
-                z: (p0.z + p1.z + p2.z + p3.z) / 4,
-            };
-
-            const normal = calculateNormal(p0, p1, p2);
-
-            const face = {
-                vertices: [p0, p1, p2, p3],
-                centroid: centroid,
-                depth: centroid.z,
-            };
-
-            faces.push(face);
-        }
-    }
-
-    // Ordenar as faces com base na profundidade (z)
-    faces.sort((a, b) => b.depth - a.depth);
-
+  const drawFaces = (ctx, faces, width, height) => {
     // Desenhar as faces na ordem ordenada
     faces.forEach(face => {
         const [p0, p1, p2, p3] = face.vertices;
 
-        const normal = calculateNormal(p0, p1, p2);
-        face['normal']=normal
         // Calculate color using flat shading
         const color = calculateFlatShading(face, lightSource, { Kd: { r: 0.8, g: 0.5, b: 0.3 } });
 
         ctx.strokeStyle = `rgb(0, 50, 255)`;
         ctx.fillStyle = `rgb(255, 255, 255, 0)`;
 
-        if (isFaceVisible(face.centroid, normal, VRP)) {
-            const pp0 = p0; //projectPoint(p0, width, height);
-            const pp1 = p1; //projectPoint(p1, width, height);
-            const pp2 = p2; //projectPoint(p2, width, height);
-            const pp3 = p3; //projectPoint(p3, width, height);
-
+        if (isFaceVisible(face.centroid, face.normal, VRP)) {
             /*ctx.beginPath();
-            ctx.moveTo(pp0.x, pp0.y);
-            ctx.lineTo(pp1.x, pp1.y);
-            ctx.lineTo(pp2.x, pp2.y);
-            ctx.lineTo(pp3.x, pp3.y);
+            ctx.moveTo(pp0.x, p0.y);
+            ctx.lineTo(pp1.x, p1.y);
+            ctx.lineTo(pp2.x, p2.y);
+            ctx.lineTo(pp3.x, p3.y);
             ctx.closePath();
             ctx.fill();
             ctx.stroke();*/
-            drawPolygon(ctx, pp0, pp1, pp2, pp3, color, zBuffer);
+            drawPolygon(ctx, p0, p1, p2, p3, color, zBuffer);
         }
     });
 };
