@@ -2,7 +2,7 @@ import React, { useRef, useState, useEffect, useReducer } from 'react';
 import './Canvas.css';
 import { translate, rotateX, rotateY, rotateZ, scale } from '../utils/Transformations';
 import { calculateNormal, isFaceVisible,  } from '../utils/Operations';
-import { dotProduct, normalize } from '../utils/VectorsOperations';
+import { dotProduct, normalize, subtractVectors } from '../utils/VectorsOperations';
 import { computeCameraMatrix } from '../utils/SRU2SRC';
 import { computeViewMatrix } from '../utils/View';
 import { multiplyMatrices } from '../utils/MatricesOperations'
@@ -62,7 +62,9 @@ const Canvas = () => {
   const [distance, setDistance] = useState(cameraInitialState.distance)
 
   const viewUp = { x: 0, y: 1, z: 0 }; // Y
-  const lightDirection = { x: 0, y: 0, z: -1 };
+
+  const [zBuffer, setZBuffer] = useState([]);
+  const lightSource = { position: { x: 100, y: 100, z: 200 }, intensity: { r: 255, g: 255, b: 255 } };
 
   const [models, setModels] = useState([]);
   const [selectedModelIndex, setSelectedModelIndex] = useState(null);
@@ -73,7 +75,7 @@ const Canvas = () => {
 
   useEffect(() => {
     drawScene(models);
-  }, [models, transform, projectionType]);
+  }, [models, projectionType]);
 
   const handleModelSelect = (index) => {
     setSelectedModelIndex(index);
@@ -82,12 +84,11 @@ const Canvas = () => {
     setProfile(selectedModel.profile);
   };
 
-  const calculateLightIntensity = (normal) => {
-    //const normalizedNormal = normalize(normal);
-    const normalizedLightDir = normalize(lightDirection);
+  useEffect(() => {
+    const canvas = canvas3DRef.current;
+    setZBuffer(Array(canvas.width).fill(0).map(() => Array(canvas.height).fill(Infinity)));
+  }, [viewport]);
 
-    return Math.max(dotProduct(normal, normalizedLightDir), 0);
-  };
 
   const applyCameraTransform = (modelVertices, cameraMatrix) => {
     return modelVertices.map(slice =>
@@ -226,9 +227,32 @@ const Canvas = () => {
 
     const sortedModels = modelsWithCentroids.sort((a, b) => b.centroid.z - a.centroid.z);
 
+    clearZBuffer();
+
     sortedModels.forEach((model) => {
       drawFaces(ctx, model.vertices, width, height);
     });
+  };
+
+  const clearZBuffer = () => {
+    const canvas = canvas3DRef.current;
+    setZBuffer(Array(canvas.width).fill(0).map(() => Array(canvas.height).fill(Infinity)));
+  };
+
+  const calculateFlatShading = (face, light, material) => {
+    const centroid = face.centroid; // You already calculate the centroid!
+    const N = normalize(face.normal); // Assuming you are storing face normals
+    const L = normalize(subtractVectors(light.position, centroid));
+    const dotProductLN = dotProduct(N, L);
+
+    // Simple ambient and diffuse lighting for demonstration
+    let color = { r: 50, g: 50, b: 50 }; // Ambient color
+    if (dotProductLN > 0) {
+      color.r += material.Kd.r * light.intensity.r * dotProductLN;
+      color.g += material.Kd.g * light.intensity.g * dotProductLN;
+      color.b += material.Kd.b * light.intensity.b * dotProductLN;
+    }
+    return color;
   };
 
   const generate3DModel = () => {
@@ -279,6 +303,8 @@ const Canvas = () => {
                 z: (p0.z + p1.z + p2.z + p3.z) / 4,
             };
 
+            const normal = calculateNormal(p0, p1, p2);
+
             const face = {
                 vertices: [p0, p1, p2, p3],
                 centroid: centroid,
@@ -297,9 +323,10 @@ const Canvas = () => {
         const [p0, p1, p2, p3] = face.vertices;
 
         const normal = calculateNormal(p0, p1, p2);
-        const intensity = calculateLightIntensity(normal);
-        const shade = Math.floor(255 * intensity);
-        //ctx.fillStyle = `rgb(${shade}, ${shade}, ${shade})`;
+        face['normal']=normal
+        // Calculate color using flat shading
+        const color = calculateFlatShading(face, lightSource, { Kd: { r: 0.8, g: 0.5, b: 0.3 } });
+
         ctx.strokeStyle = `rgb(0, 50, 255)`;
         ctx.fillStyle = `rgb(255, 255, 255, 0)`;
 
@@ -309,18 +336,60 @@ const Canvas = () => {
             const pp2 = p2; //projectPoint(p2, width, height);
             const pp3 = p3; //projectPoint(p3, width, height);
 
-            ctx.beginPath();
+            /*ctx.beginPath();
             ctx.moveTo(pp0.x, pp0.y);
             ctx.lineTo(pp1.x, pp1.y);
             ctx.lineTo(pp2.x, pp2.y);
             ctx.lineTo(pp3.x, pp3.y);
             ctx.closePath();
             ctx.fill();
-            ctx.stroke();
+            ctx.stroke();*/
+            drawPolygon(ctx, pp0, pp1, pp2, pp3, color, zBuffer);
         }
     });
 };
 
+  const drawPolygon = (ctx, p0, p1, p2, p3, color, zBuffer) => {
+    const minX = Math.min(p0.x, p1.x, p2.x, p3.x);
+    const maxX = Math.max(p0.x, p1.x, p2.x, p3.x);
+    const minY = Math.min(p0.y, p1.y, p2.y, p3.y);
+    const maxY = Math.max(p0.y, p1.y, p2.y, p3.y);
+
+    for (let x = Math.floor(minX); x <= Math.ceil(maxX); x++) {
+      for (let y = Math.floor(minY); y <= Math.ceil(maxY); y++) {
+        if (isPointInsideTriangle(x, y, p0, p1, p2, p3)) {
+          // Perform depth test
+          const z = calculateZValue(x, y, p0, p1, p2); // You'll need to implement this
+          if (z < zBuffer[x][y]) {
+            zBuffer[x][y] = z; // Update z-buffer
+            ctx.fillStyle = `rgb(${color.r}, ${color.g}, ${color.b})`;
+            ctx.fillRect(x, y, 1, 1);
+          }
+        }
+      }
+    }
+  };
+
+  const calculateZValue = (x, y, p0, p1, p2) => {
+    // Calculate barycentric coordinates
+    const denominator = (p1.y - p2.y) * (p0.x - p2.x) + (p2.x - p1.x) * (p0.y - p2.y);
+    const u = ((p1.y - p2.y) * (x - p2.x) + (p2.x - p1.x) * (y - p2.y)) / denominator;
+    const v = ((p2.y - p0.y) * (x - p2.x) + (p0.x - p2.x) * (y - p2.y)) / denominator;
+    const w = 1 - u - v;
+
+    // Interpolate z-value
+    return u * p0.z + v * p1.z + w * p2.z;
+  };
+
+  const isPointInsideTriangle = (x, y, p0, p1, p2, p3) => {
+    // Using barycentric coordinates (you can use other methods too)
+    const denominator = (p1.y - p2.y) * (p0.x - p2.x) + (p2.x - p1.x) * (p0.y - p2.y);
+    const a = ((p1.y - p2.y) * (x - p2.x) + (p2.x - p1.x) * (y - p2.y)) / denominator;
+    const b = ((p2.y - p0.y) * (x - p2.x) + (p0.x - p2.x) * (y - p2.y)) / denominator;
+    const c = 1 - a - b;
+
+    return a >= 0 && a <= 1 && b >= 0 && b <= 1 && c >= 0 && c <= 1;
+  };
 
   const translateModelToOriginAndApplyTransformations = (model, centroid) => {
     return model.map((slice) =>
@@ -540,7 +609,7 @@ const Canvas = () => {
         </div>
       </div>
       <div className="main">
-        <canvas ref={canvas3DRef} width="900" height="900" style={{ border: '1px solid black' }} />
+        <canvas ref={canvas3DRef} width={viewport.u.max} height={viewport.v.max} style={{ border: '1px solid black' }} />
       </div>
     </div>
   );
