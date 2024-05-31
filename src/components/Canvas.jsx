@@ -170,7 +170,7 @@ const Canvas = () => {
               depth: centroid.z,
               normal: normal, // Store normal with the face
           };
-
+          if (isFaceVisible(face.centroid, face.normal, VRP))
           newFaces.push(face);
       }
     }
