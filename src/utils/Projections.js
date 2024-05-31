@@ -26,13 +26,19 @@ export const computeParallelProjectionMatrix = (window) => {
   const top = y.max;
   const near = z.min;
   const far = z.max;
+  return[
+    [1, 0, 0, 0],
+    [0, 1, 0, 0],
+    [0, 0, 1, 0],
+    [0, 0, 0, 1]
 
-  return [
+  ]
+  /*return [
       [2 / (right - left), 0, 0, -(right + left) / (right - left)],
       [0, 2 / (top - bottom), 0, -(top + bottom) / (top - bottom)],
       [0, 0, -2 / (far - near), -(far + near) / (far - near)],
       [0, 0, 0, 1]
-  ];
+  ];*/
 }
 
 export const computePerspectiveProjMatrix = (distance) => {

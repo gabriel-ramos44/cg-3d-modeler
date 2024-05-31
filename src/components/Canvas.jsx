@@ -15,11 +15,11 @@ const transformationsInitialState = {
 };
 
 const cameraInitialState = {
-  VRP: { x: 0, y: 0, z: 100 },
+  VRP: { x: 0, y: 0, z: 500 },
   focalPoint: { x: 0, y: 0, z: 0 }, // P
   distance: 500,
-  window:  {x:{min: 0, max: 500}, y:{min: 0, max: 500}, z:{min: 0, max: 500} },
-  viewport:  {u:{min: -450, max: 450}, v:{min: -450, max:450}}
+  window:  {x:{min: 0, max: 500}, y:{min: 0, max: 500}, z:{min: 0, max: 1000} },
+  viewport:  {u:{min: 0, max: 900}, v:{min: 0, max:900}}
 };
 
 const transformReducer = (state, action) => {
@@ -92,11 +92,11 @@ const Canvas = () => {
   const applyCameraTransform = (modelVertices, cameraMatrix) => {
     return modelVertices.map(slice =>
       slice.map(point => {
-        const transformedPoint = multiplyMatrixAndPoint(cameraMatrix, point);
+        const transformedPoint = centralizePointOnCanva(multiplyMatrixAndPoint(cameraMatrix, point));
         return {
-          x: transformedPoint[0],
-          y: transformedPoint[1],
-          z: transformedPoint[2],
+          x: transformedPoint.x,
+          y: transformedPoint.y,
+          z: transformedPoint.z,
         };
       })
     );
@@ -182,6 +182,17 @@ const Canvas = () => {
     }
   };
 
+  const centralizePointOnCanva = (p) => {
+    const X = (viewport.u.max + viewport.u.min) / 2;
+    const Y = (viewport.v.max + viewport.v.min) / 2;
+
+    return {
+      x: p[0] + X,
+      y: -p[1] + Y,
+      z: p[2],
+    };
+  }
+
   const drawScene = (customModels) => {
     const canvas = canvas3DRef.current;
     const ctx = canvas.getContext('2d');
@@ -189,24 +200,18 @@ const Canvas = () => {
     const height = canvas.height;
     ctx.clearRect(0, 0, width, height);
 
-
     // Msru src
     const cameraMatrix = computeCameraMatrix(VRP, focalPoint, viewUp);
-
     // Mjp
-    const viewMatrix = computeViewMatrix(window, viewport)
+    const viewMatrix = computeViewMatrix(window, viewport);
 
     // Mproj
-    const projectionMatrix = projectionType === 'perspective' ?
-      // computePerspectiveProjMatrix(window)
-      computePerspectiveProjMatrix(distance)
-      :
-      computeParallelProjectionMatrix(window)
+    const projectionMatrix = projectionType === 'perspective'
+      ? computePerspectiveProjMatrix(distance)
+      : computeParallelProjectionMatrix(window);
 
-
-    const mJpXmProj = multiplyMatrices(viewMatrix, projectionMatrix)
-
-    const SruSrtMatrix = multiplyMatrices(mJpXmProj, cameraMatrix)
+    const mJpXmProj = multiplyMatrices(viewMatrix, projectionMatrix);
+    const SruSrtMatrix = multiplyMatrices(mJpXmProj, cameraMatrix);
 
     // SRU to SRT
     const modelsWithTransformedVertices = customModels.map(model => ({

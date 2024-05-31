@@ -1,5 +1,5 @@
 // TOP
-export const computeViewMatrix = (window, viewport) => {
+/*export const computeViewMatrix = (window, viewport) => {
     const {u, v} = viewport
     const {x, y, z} = window
 
@@ -15,6 +15,25 @@ export const computeViewMatrix = (window, viewport) => {
     ]
 
     return topMjp;
+  };*/
+
+  export const computeViewMatrix = (window, viewport) => {
+    const {u, v} = viewport
+    const {x, y, z} = window
+
+    const uDiff = u.max - u.min
+    const xDiff = x.max - x.min
+    const yDiff = y.max - y.min
+    const vDiff = v.max - v.min
+
+    const Mjp =[
+      [uDiff/xDiff, 0, 0, -x.min*(uDiff/xDiff)+u.min],
+      [0, (vDiff)/yDiff, 0, -y.min*(vDiff/yDiff)+v.min],
+      [0, 0, 1, 0],
+      [0, 0, 0, 1]
+    ]
+
+    return Mjp;
   };
 
   // FRONT
@@ -36,36 +55,3 @@ export const computeViewMatrix = (window, viewport) => {
 
     return frontMjp;
   };*/
-/*
-  export const createMjp(window, viewport) => {
-    const {u, v} = viewport
-    const {x, y, z} = window
-
-    const uDiff = u.max - u.min
-    const xDiff = x.max - x.min
-    const vDiff = v.max - v.min
-
-    let Mjp = [
-      [uDiff/xDiff, 0, 0, Tx],
-      [0, Sy, 0, Ty],
-      [0, 0, 1, 0],
-      [0, 0, 0, 1],
-    ];
-    return Mjp;
-  }
-
-
-  function createMjp(Xmin, Xmax, Ymin, Ymax, Umin, Umax, Vmin, Vmax) {
-    let Sx = (Umax - Umin) / (Xmax - Xmin);
-    let Sy = (Vmax - Vmin) / (Ymax - Ymin);
-    let Tx = (Umin * Xmax - Umax * Xmin) / (Xmax - Xmin);
-    let Ty = (Vmin * Ymax - Vmax * Ymin) / (Ymax - Ymin);
-    let Mjp = [
-      [Sx, 0, 0, Tx],
-      [0, Sy, 0, Ty],
-      [0, 0, 1, 0],
-      [0, 0, 0, 1],
-    ];
-    return Mjp;
-  }
-*/
