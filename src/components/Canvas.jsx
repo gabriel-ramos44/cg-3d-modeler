@@ -2,7 +2,7 @@ import React, { useRef, useState, useEffect, useReducer, useMemo } from 'react';
 import './Canvas.css';
 import { translate, rotateX, rotateY, rotateZ, scale } from '../utils/Transformations';
 import { calculateNormal, isFaceVisible,  } from '../utils/Operations';
-import { dotProduct, normalize, subtractVectors } from '../utils/VectorsOperations';
+import { dotProduct, normalize, subtractVectors, vectorByScalar } from '../utils/VectorsOperations';
 import { computeCameraMatrix } from '../utils/SRU2SRC';
 import { computeViewMatrix } from '../utils/View';
 import { multiplyMatrices } from '../utils/MatricesOperations'
@@ -53,21 +53,37 @@ const Canvas = () => {
   const [slices, setSlices] = useState(30);
   const [transform, dispatchTransform] = useReducer(transformReducer, transformationsInitialState);
   const [projectionType, setProjectionType] = useState('perspective');//useState('parallel');
-  //const VRP = { x: 0, y: 0, z: 800 };
+
   const [VRP, setVRP] = useState(cameraInitialState.VRP)
-  //const focalPoint = { x: 0, y: 0, z: 0 }; // P
+
   const [focalPoint, setFocalPoint] = useState(cameraInitialState.focalPoint)
 
   const [window, setWindow] = useState(cameraInitialState.window)
   const [viewport, setViewport] = useState(cameraInitialState.viewport)
   const [distance, setDistance] = useState(cameraInitialState.distance)
 
+  // Lampada
+  const [lightSource, setLightSource] = useState({
+    position: { x: 100, y: 100, z: 200 },
+    intensity: { r: 255, g: 255, b: 255 }
+  });
+
+  const [ambientLight, setAmbientLight] = useState({
+    intensity: { r: 50, g: 50, b: 50 }
+  });
+
+  const [material, setMaterial] = useState({
+    Ka: { r: 0.2, g: 0.2, b: 0.2 },
+    Kd: { r: 0.8, g: 0.8, b: 0.8 },
+    Ks: { r: 0.5, g: 0.5, b: 0.5 },
+    shininess: 32                  // Specular exponent
+  });
+
   const  [viewUp, setViewUp]  = useState(cameraInitialState.viewUp)
 
   const [renderMode, setRenderMode] = useState('wireframe')
 
   const [zBuffer, setZBuffer] = useState([]);
-  const lightSource = { position: { x: 100, y: 100, z: 200 }, intensity: { r: 255, g: 255, b: 255 } };
 
   const [models, setModels] = useState([]);
   const [selectedModelIndex, setSelectedModelIndex] = useState(null);
@@ -287,8 +303,8 @@ const Canvas = () => {
     const modelsWithTransformedVertices = customModels.map((model, index) => ({
       ...model,
       vertices: applyCameraTransform(model.vertices, transformationMatrix),
-      centroid: memoizedCentroids[index], // Assign memoized centroid
-      faces: memoizedFaces[index]          // Assign memoized faces
+      centroid: memoizedCentroids[index],
+      faces: memoizedFaces[index]
     }));
 
     const sortedModels = modelsWithTransformedVertices.sort((a, b) => b.centroid.z - a.centroid.z);
@@ -307,21 +323,52 @@ const Canvas = () => {
     setZBuffer(Array(canvas.width).fill(0).map(() => Array(canvas.height).fill(Infinity)));
   };
 
-  const calculateFlatShading = (face, light, material) => {
-    const centroid = face.centroid; // You already calculate the centroid!
-    const N = normalize(face.normal); // Assuming you are storing face normals
+  const calculateFlatShading = (face, light, ambient, material) => {
+    const centroid = face.centroid;
+    const N = normalize(face.normal);
     const L = normalize(subtractVectors(light.position, centroid));
+    const V = normalize(subtractVectors(VRP, centroid)); // Viewer direction (from centroid to VRP)
+
     const dotProductLN = dotProduct(N, L);
 
-    // Simple ambient and diffuse lighting for demonstration
-    let color = { r: 50, g: 50, b: 50 }; // Ambient color
+    let Ia = {
+      r: ambient.intensity.r * material.Ka.r,
+      g: ambient.intensity.g * material.Ka.g,
+      b: ambient.intensity.b * material.Ka.b
+    };
+
+    // Diffuse component
+    let Id = { r: 0, g: 0, b: 0 };
     if (dotProductLN > 0) {
-      color.r += material.Kd.r * light.intensity.r * dotProductLN;
-      color.g += material.Kd.g * light.intensity.g * dotProductLN;
-      color.b += material.Kd.b * light.intensity.b * dotProductLN;
+      Id = {
+        r: light.intensity.r * material.Kd.r * dotProductLN,
+        g: light.intensity.g * material.Kd.g * dotProductLN,
+        b: light.intensity.b * material.Kd.b * dotProductLN
+      };
     }
+
+    // Specular component
+    let Is = { r: 0, g: 0, b: 0 };
+    if (dotProductLN > 0) { // Only calculate specular if surface is facing the light
+      const R = normalize(subtractVectors(vectorByScalar(N, 2 * dotProductLN), L)); // Reflection vector
+      const dotProductRV = Math.max(dotProduct(R, V), 0); // Ensure non-negative
+      const specularIntensity = Math.pow(dotProductRV, material.shininess);
+      Is = {
+        r: light.intensity.r * material.Ks.r * specularIntensity,
+        g: light.intensity.g * material.Ks.g * specularIntensity,
+        b: light.intensity.b * material.Ks.b * specularIntensity
+      };
+    }
+
+    // Combine components
+    let color = {
+      r: Math.min(Ia.r + Id.r + Is.r, 255), // Clamp to 255
+      g: Math.min(Ia.g + Id.g + Is.g, 255),
+      b: Math.min(Ia.b + Id.b + Is.b, 255)
+    };
     return color;
   };
+
 
   const generate3DModel = () => {
     const newModel = {
@@ -341,7 +388,7 @@ const Canvas = () => {
         const [p0, p1, p2] = face.vertices;
 
         // Calculate color using flat shading
-        const color = calculateFlatShading(face, lightSource, { Kd: { r: 0.8, g: 0.5, b: 0.3 } });
+
 
         if (renderMode === 'wireframe') {
           ctx.strokeStyle = `rgb(0, 50, 255)`;
@@ -354,7 +401,7 @@ const Canvas = () => {
           ctx.stroke();
         }
         else if (renderMode === 'constant') {
-          const color = calculateFlatShading(face, lightSource, { Kd: { r: 0.8, g: 0.5, b: 0.3 } });
+          const color = calculateFlatShading(face, lightSource, ambientLight, material);
           drawPolygon(ctx, p0, p1, p2, color, zBuffer);
         }
     });
@@ -453,6 +500,14 @@ const Canvas = () => {
     }
   };
 
+  const handleColorChange = (setter, component, value) => {
+    setter(prev => ({ ...prev, intensity: { ...prev.intensity, [component]: value } }));
+  };
+
+  const handleMaterialChange = (component, property, value) => {
+    setMaterial(prev => ({ ...prev, [component]: { ...prev[component], [property]: value } }));
+  };
+
   return (
     <div className="container">
       <div className="sidebar">
@@ -537,6 +592,40 @@ const Canvas = () => {
                 onChange={(e) => setFocalPoint(  { ...focalPoint, z: parseInt(e.target.value)})}
               />
             </div>
+        </div>
+        <h3>Light Source</h3>
+        <div>
+          <label>X:</label>
+          <input type="number" value={lightSource.position.x}
+                 onChange={(e) => setLightSource(prev => ({ ...prev, position: { ...prev.position, x: parseInt(e.target.value) } }))} />
+          <label>Y:</label>
+          <input type="number" value={lightSource.position.y}
+                 onChange={(e) => setLightSource(prev => ({ ...prev, position: { ...prev.position, y: parseInt(e.target.value) } }))} />
+          <label>Z:</label>
+          <input type="number" value={lightSource.position.z}
+                 onChange={(e) => setLightSource(prev => ({ ...prev, position: { ...prev.position, z: parseInt(e.target.value) } }))} />
+        </div>
+        <div>
+          <label>Intensity (R, G, B):</label>
+          <input type="number" value={lightSource.intensity.r} onChange={(e) => handleColorChange(setLightSource, 'r', parseInt(e.target.value))} />
+          <input type="number" value={lightSource.intensity.g} onChange={(e) => handleColorChange(setLightSource, 'g', parseInt(e.target.value))} />
+          <input type="number" value={lightSource.intensity.b} onChange={(e) => handleColorChange(setLightSource, 'b', parseInt(e.target.value))} />
+        </div>
+
+        <h3>Ambient Light</h3>
+        <div>
+          <label>Intensity (R, G, B):</label>
+          <input type="number" value={ambientLight.intensity.r} onChange={(e) => handleColorChange(setAmbientLight, 'r', parseInt(e.target.value))} />
+          <input type="number" value={ambientLight.intensity.g} onChange={(e) => handleColorChange(setAmbientLight, 'g', parseInt(e.target.value))} />
+          <input type="number" value={ambientLight.intensity.b} onChange={(e) => handleColorChange(setAmbientLight, 'b', parseInt(e.target.value))} />
+        </div>
+
+        <h3>Material</h3>
+        <div>
+          <label>Ka (R, G, B):</label>
+          <input type="number" min="0" max="1" step="0.1" value={material.Ka.r} onChange={(e) => handleMaterialChange('Ka', 'r', parseFloat(e.target.value))} />
+          <input type="number" min="0" max="1" step="0.1" value={material.Ka.g} onChange={(e) => handleMaterialChange('Ka', 'g', parseFloat(e.target.value))} />
+          <input type="number" min="0" max="1" step="0.1" value={material.Ka.b} onChange={(e) => handleMaterialChange('Ka', 'b', parseFloat(e.target.value))} />
         </div>
         <div>
           <h3>Transformations</h3>
