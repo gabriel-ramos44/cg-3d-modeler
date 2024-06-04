@@ -1,5 +1,6 @@
 import React, { useRef, useState, useEffect, useReducer, useMemo } from 'react';
 import './Canvas.css';
+import Sidebar from './Sidebar/Sidebar.jsx';
 import { translate, rotateX, rotateY, rotateZ, scale } from '../utils/Transformations';
 import { calculateNormal, isFaceVisible,  } from '../utils/Operations';
 import { dotProduct, normalize, subtractVectors, addVectors, vectorByScalar } from '../utils/VectorsOperations';
@@ -15,10 +16,10 @@ const transformationsInitialState = {
 };
 
 const cameraInitialState = {
-  VRP: { x: 0, y: 0, z: 500 },
+  VRP: { x: 0, y: 0, z: 800 },
   focalPoint: { x: 0, y: 0, z: 0 },
   distance: 500,
-  window:  {x:{min: 0, max: 500}, y:{min: 0, max: 500}, z:{min: 0, max: 1000} },
+  window:  {x:{min: 0, max: 500}, y:{min: 0, max: 500}, z:{min: -1000, max: 2000} },
   viewport:  {u:{min: 0, max: 900}, v:{min: 0, max:900}},
   viewUp: { x: 0, y: 1, z: 0 }
 };
@@ -50,7 +51,7 @@ const defaultMaterial = {
   Ka: { r: 0.2, g: 0.2, b: 0.2 },
   Kd: { r: 0.8, g: 0.8, b: 0.8 },
   Ks: { r: 0.5, g: 0.5, b: 0.5 },
-  shininess: 15
+  shininess: 5
 };
 
 const Canvas = () => {
@@ -70,8 +71,8 @@ const Canvas = () => {
   const [distance, setDistance] = useState(cameraInitialState.distance)
 
   const [lightSource, setLightSource] = useState({
-    position: { x: 100, y: 100, z: 200 },
-    intensity: { r: 255, g: 255, b: 255 }
+    position: { x: 100, y: 100, z: 700 },
+    intensity: { r: 100, g: 25, b: 25 }
   });
 
   const [ambientLight, setAmbientLight] = useState({
@@ -459,20 +460,38 @@ const drawPolygonWithNormalInterpolation = (ctx, p0, p1, p2, n0, n1, n2, zBuffer
   const minY = Math.min(p0.y, p1.y, p2.y);
   const maxY = Math.max(p0.y, p1.y, p2.y);
 
-  for (let x = Math.floor(minX); x <= Math.ceil(maxX); x++) {
-    for (let y = Math.floor(minY); y <= Math.ceil(maxY); y++) {
-      if (isPointInsideTriangle(x, y, p0, p1, p2)) {
-        const z = calculateZValue(x, y, p0, p1, p2);
-        if (z < zBuffer[x][y]) {
-          zBuffer[x][y] = z;
+  for (let y = Math.floor(minY); y <= Math.ceil(maxY); y++) {
+    const { firstPixelInside, lastPixelInside } = findFirstAndLastPixelsInsideTriangleLine(y, minX, maxX, p0, p1, p2);
 
-          // interp nomrms
-          const normal = interpolateNormal(x, y, p0, p1, p2, n0, n1, n2);
+    if (firstPixelInside !== null && lastPixelInside !== null) {
+      const normalStart = interpolateNormal(firstPixelInside, y, p0, p1, p2, n0, n1, n2);
+      const normalEnd = interpolateNormal(lastPixelInside, y, p0, p1, p2, n0, n1, n2);
 
-          const color = calculatePhongShading(normal, {x, y, z}, lightSource, ambientLight, materials[modelIndex]);
+      const normalDelta = {
+        x: (normalEnd.x - normalStart.x) / (lastPixelInside - firstPixelInside),
+        y: (normalEnd.y - normalStart.y) / (lastPixelInside - firstPixelInside),
+        z: (normalEnd.z - normalStart.z) / (lastPixelInside - firstPixelInside)
+      };
 
-          ctx.fillStyle = `rgb(${Math.round(color.r)}, ${Math.round(color.g)}, ${Math.round(color.b)})`;
-          ctx.fillRect(x, y, 1, 1);
+      let currentNormal = normalStart;
+
+      for (let x = firstPixelInside; x <= lastPixelInside; x++) {
+        if (x >= 0 && x < zBuffer.length && y >= 0 && y < zBuffer[0].length) {
+          const z = calculateZValue(x, y, p0, p1, p2);
+          if (z < zBuffer[x][y]) {
+            zBuffer[x][y] = z;
+
+            const color = calculatePhongShading(currentNormal, {x, y, z}, lightSource, ambientLight, materials[modelIndex]);
+
+            ctx.fillStyle = `rgb(${Math.round(color.r)}, ${Math.round(color.g)}, ${Math.round(color.b)})`;
+            ctx.fillRect(x, y, 1, 1);
+
+            currentNormal = {
+              x: currentNormal.x + normalDelta.x,
+              y: currentNormal.y + normalDelta.y,
+              z: currentNormal.z + normalDelta.z
+            };
+          }
         }
       }
     }
@@ -495,21 +514,56 @@ const interpolateNormal = (x, y, p0, p1, p2, n0, n1, n2) => {
 // area + pesos baricentricos
 const edgeFunction = (v0, v1, v2) => (v2.x - v0.x) * (v1.y - v0.y) - (v2.y - v0.y) * (v1.x - v0.x);
 
+const findFirstAndLastPixelsInsideTriangleLine = (y, minX, maxX, p0, p1, p2) => {
+  let firstPixelInside = null;
+  let lastPixelInside = null;
+
+  for (let x = Math.floor(minX); x <= Math.ceil(maxX); x++) {
+    if (isPointInsideTriangle(x, y, p0, p1, p2)) {
+      if (firstPixelInside === null) firstPixelInside = x;
+      lastPixelInside = x;
+    }
+  }
+
+  return { firstPixelInside, lastPixelInside };
+};
+
+
+
 const drawPolygonWithColorInterpolation = (ctx, p0, p1, p2, zBuffer) => {
   const minX = Math.min(p0.x, p1.x, p2.x);
   const maxX = Math.max(p0.x, p1.x, p2.x);
   const minY = Math.min(p0.y, p1.y, p2.y);
   const maxY = Math.max(p0.y, p1.y, p2.y);
 
-  for (let x = Math.floor(minX); x <= Math.ceil(maxX); x++) {
-    for (let y = Math.floor(minY); y <= Math.ceil(maxY); y++) {
-      if (isPointInsideTriangle(x, y, p0, p1, p2)) {
-        const z = calculateZValue(x, y, p0, p1, p2);
-        if (z < zBuffer[x][y]) {
-          zBuffer[x][y] = z;
-          const color = interpolateColor(x, y, p0, p1, p2);
-          ctx.fillStyle = `rgb(${Math.round(color.r)}, ${Math.round(color.g)}, ${Math.round(color.b)})`;
-          ctx.fillRect(x, y, 1, 1);
+  for (let y = Math.floor(minY); y <= Math.ceil(maxY); y++) {
+    const { firstPixelInside, lastPixelInside } = findFirstAndLastPixelsInsideTriangleLine(y, minX, maxX, p0, p1, p2);
+
+    if (firstPixelInside !== null && lastPixelInside !== null) {
+      const colorStart = interpolateColor(firstPixelInside, y, p0, p1, p2);
+      const colorEnd = interpolateColor(lastPixelInside, y, p0, p1, p2);
+      const colorDelta = {
+        r: (colorEnd.r - colorStart.r) / (lastPixelInside - firstPixelInside),
+        g: (colorEnd.g - colorStart.g) / (lastPixelInside - firstPixelInside),
+        b: (colorEnd.b - colorStart.b) / (lastPixelInside - firstPixelInside)
+      };
+
+      let currentColor = colorStart;
+
+      for (let x = firstPixelInside; x <= lastPixelInside; x++) {
+        if (x >= 0 && x < zBuffer.length && y >= 0 && y < zBuffer[0].length) {
+          const z = calculateZValue(x, y, p0, p1, p2);
+          if (z < zBuffer[x][y]) {
+            zBuffer[x][y] = z;
+            ctx.fillStyle = `rgb(${Math.round(currentColor.r)}, ${Math.round(currentColor.g)}, ${Math.round(currentColor.b)})`;
+            ctx.fillRect(x, y, 1, 1);
+
+            currentColor = {
+              r: currentColor.r + colorDelta.r,
+              g: currentColor.g + colorDelta.g,
+              b: currentColor.b + colorDelta.b
+            };
+          }
         }
       }
     }
@@ -642,12 +696,14 @@ function calculateVertexNormal(vertex, faces) {
 
     for (let x = Math.floor(minX); x <= Math.ceil(maxX); x++) {
       for (let y = Math.floor(minY); y <= Math.ceil(maxY); y++) {
-        if (isPointInsideTriangle(x, y, p0, p1, p2)) {
-          const z = calculateZValue(x, y, p0, p1, p2);
-          if (z < zBuffer[x][y]) {
-            zBuffer[x][y] = z;
-            ctx.fillStyle = `rgb(${color.r}, ${color.g}, ${color.b})`;
-            ctx.fillRect(x, y, 1, 1);
+        if (x >= 0 && x < zBuffer.length && y >= 0 && y < zBuffer[0].length){
+          if (isPointInsideTriangle(x, y, p0, p1, p2)) {
+            const z = calculateZValue(x, y, p0, p1, p2);
+            if (z < zBuffer[x][y]) {
+              zBuffer[x][y] = z;
+              ctx.fillStyle = `rgb(${color.r}, ${color.g}, ${color.b})`;
+              ctx.fillRect(x, y, 1, 1);
+            }
           }
         }
       }
@@ -741,13 +797,17 @@ function calculateVertexNormal(vertex, faces) {
     setViewport(prev => ({ ...prev, [axis]: { ...prev[axis], [minMax]: parseInt(value) } }));
   };
 
-  const handleMaterialChange = (modelIndex, component, property, value) => {
+  const handleMaterialChange = (modelIndex, property, key, value) => {
     setMaterials(prevMaterials => {
       const updatedMaterials = [...prevMaterials];
-      updatedMaterials[modelIndex] = {
-        ...updatedMaterials[modelIndex],
-        [component]: { ...updatedMaterials[modelIndex][component], [property]: parseFloat(value) }
-      };
+
+      updatedMaterials[modelIndex] = JSON.parse(JSON.stringify(updatedMaterials[modelIndex]));
+
+      if (key) {
+        updatedMaterials[modelIndex][property][key] = parseFloat(value);
+      } else {
+        updatedMaterials[modelIndex][property] = parseFloat(value);
+      }
       return updatedMaterials;
     });
   };
@@ -763,9 +823,12 @@ function calculateVertexNormal(vertex, faces) {
             </option>
           ))}
         </select>
-        <canvas ref={canvas2DRef} width="200" height="200" style={{ border: '1px solid black' }} onClick={handle2DCanvasClick} />
-        {selectedModelIndex === null && <button onClick={generate3DModel}>Generate 3D Model</button>}
-        {(selectedModelIndex || selectedModelIndex === 0) && <button onClick={updateSelectedModel}>Update Selected Model</button>}
+        <canvas ref={canvas2DRef} width="200" height="200" onClick={handle2DCanvasClick} />
+        {selectedModelIndex === null ? (
+          <button onClick={generate3DModel}>Generate 3D Model</button>
+        ) : (
+          <button onClick={updateSelectedModel}>Update Selected Model</button>
+        )}
         <label>Slices: </label>
         <input type="number" value={slices} onChange={handleSlicesChange} min="3" max="360" />
         <div>
@@ -784,236 +847,24 @@ function calculateVertexNormal(vertex, faces) {
             <option value="phong">Phong Shading</option>
           </select>
         </div>
-        <div>
-        <h3>Transformations</h3>
-        <div>
-          <label>Translate X: </label>
-          <input
-            type="range"
-            min="-100"
-            max="100"
-            value={transform.translate.x}
-            onChange={(e) => dispatchTransform({ type: 'translateX', value: parseInt(e.target.value) })}
-          />
-          <span>{transform.translate.x}</span>
-        </div>
-        <div>
-          <label>Translate Y: </label>
-          <input
-            type="range"
-            min="-100"
-            max="100"
-            value={transform.translate.y}
-            onChange={(e) => dispatchTransform({ type: 'translateY', value: parseInt(e.target.value) })}
-          />
-          <span>{transform.translate.y}</span>
-        </div>
-        <div>
-          <label>Translate Z: </label>
-          <input
-            type="range"
-            min="-100"
-            max="100"
-            value={transform.translate.z}
-            onChange={(e) => dispatchTransform({ type: 'translateZ', value: parseInt(e.target.value) })}
-          />
-          <span>{transform.translate.z}</span>
-          <input
-            type="number"
-            value={transform.translate.z}
-            onChange={(e) => dispatchTransform({ type: 'translateZ', value: parseInt(e.target.value) })}
-          />
-        </div>
-        <div>
-          <label>Rotate X: </label>
-          <input
-            type="range"
-            min="-180"
-            max="180"
-            value={transform.rotate.x}
-            onChange={(e) => dispatchTransform({ type: 'rotateX', value: parseInt(e.target.value) })}
-          />
-          <span>{transform.rotate.x}º</span>
-        </div>
-        <div>
-          <label>Rotate Y: </label>
-          <input
-            type="range"
-            min="-180"
-            max="180"
-            value={transform.rotate.y}
-            onChange={(e) => dispatchTransform({ type: 'rotateY', value: parseInt(e.target.value) })}
-          />
-          <span>{transform.rotate.y}º</span>
-        </div>
-        <div>
-          <label>Rotate Z: </label>
-          <input
-            type="range"
-            min="-180"
-            max="180"
-            value={transform.rotate.z}
-            onChange={(e) => dispatchTransform({ type: 'rotateZ', value: parseInt(e.target.value) })}
-          />
-          <span>{transform.rotate.z}º</span>
-        </div>
-        <div>
-          <label>Scale: </label>
-          <input
-            type="range"
-            min="0.1"
-            max="3"
-            step="0.1"
-            value={transform.scale}
-            onChange={(e) => dispatchTransform({ type: 'scale', value: parseFloat(e.target.value) })}
-          />
-          <span>{transform.scale}x</span>
-        </div>
-        </div>
-        <div>
-        <h3>Camera</h3>
-        <div>
-          <h4>VRP</h4>
-          <label>X:</label>
-          <input type="number" value={VRP.x} onChange={(e) => handleVector3Change(setVRP, 'x', e.target.value)} />
-          <label>Y:</label>
-          <input type="number" value={VRP.y} onChange={(e) => handleVector3Change(setVRP, 'y', e.target.value)} />
-          <label>Z:</label>
-          <input type="number" value={VRP.z} onChange={(e) => handleVector3Change(setVRP, 'z', e.target.value)} />
-        </div>
-        <div>
-          <h4>Focal Point</h4>
-          <label>X:</label>
-          <input type="number" value={focalPoint.x} onChange={(e) => handleVector3Change(setFocalPoint, 'x', e.target.value)} />
-          <label>Y:</label>
-          <input type="number" value={focalPoint.y} onChange={(e) => handleVector3Change(setFocalPoint, 'y', e.target.value)} />
-          <label>Z:</label>
-          <input type="number" value={focalPoint.z} onChange={(e) => handleVector3Change(setFocalPoint, 'z', e.target.value)} />
-        </div>
-        <div>
-          <h4>Distance</h4>
-          <input type="number" value={distance} onChange={(e) => setDistance(parseFloat(e.target.value))} />
-        </div>
-        <div>
-          <h4>View Up</h4>
-          <label>X:</label>
-          <input type="number" value={viewUp.x} onChange={(e) => handleVector3Change(setViewUp, 'x', e.target.value)} />
-          <label>Y:</label>
-          <input type="number" value={viewUp.y} onChange={(e) => handleVector3Change(setViewUp, 'y', e.target.value)} />
-          <label>Z:</label>
-          <input type="number" value={viewUp.z} onChange={(e) => handleVector3Change(setViewUp, 'z', e.target.value)} />
-        </div>
 
-        <h3>Window</h3>
-        <div>
-          <h4>X</h4>
-          <label>Min:</label>
-          <input type="number" value={window.x.min} onChange={(e) => handleWindowChange('x', 'min', e.target.value)} />
-          <label>Max:</label>
-          <input type="number" value={window.x.max} onChange={(e) => handleWindowChange('x', 'max', e.target.value)} />
-        </div>
-        {/* Repetir para Y e Z */}
-
-        <h3>Viewport</h3>
-        <div>
-          <h4>U</h4>
-          <label>Min:</label>
-          <input type="number" value={viewport.u.min} onChange={(e) => handleViewportChange('u', 'min', e.target.value)} />
-          <label>Max:</label>
-          <input type="number" value={viewport.u.max} onChange={(e) => handleViewportChange('u', 'max', e.target.value)} />
-        </div>
-        </div>
-        <h3>Light Source</h3>
-        <div>
-          <label>X:</label>
-          <input type="number" value={lightSource.position.x}
-                 onChange={(e) => setLightSource(prev => ({ ...prev, position: { ...prev.position, x: parseInt(e.target.value) } }))} />
-          <label>Y:</label>
-          <input type="number" value={lightSource.position.y}
-                 onChange={(e) => setLightSource(prev => ({ ...prev, position: { ...prev.position, y: parseInt(e.target.value) } }))} />
-          <label>Z:</label>
-          <input type="number" value={lightSource.position.z}
-                 onChange={(e) => setLightSource(prev => ({ ...prev, position: { ...prev.position, z: parseInt(e.target.value) } }))} />
-        </div>
-        <div>
-          <label>Intensity (R, G, B):</label>
-          <input type="number" value={lightSource.intensity.r} onChange={(e) => handleColorChange(setLightSource, 'r', parseInt(e.target.value))} />
-          <input type="number" value={lightSource.intensity.g} onChange={(e) => handleColorChange(setLightSource, 'g', parseInt(e.target.value))} />
-          <input type="number" value={lightSource.intensity.b} onChange={(e) => handleColorChange(setLightSource, 'b', parseInt(e.target.value))} />
-        </div>
-
-        <h3>Ambient Light</h3>
-        <div>
-          <label>Intensity (R, G, B):</label>
-          <input type="number" value={ambientLight.intensity.r} onChange={(e) => handleColorChange(setAmbientLight, 'r', parseInt(e.target.value))} />
-          <input type="number" value={ambientLight.intensity.g} onChange={(e) => handleColorChange(setAmbientLight, 'g', parseInt(e.target.value))} />
-          <input type="number" value={ambientLight.intensity.b} onChange={(e) => handleColorChange(setAmbientLight, 'b', parseInt(e.target.value))} />
-        </div>
-
-        <h3>Material</h3>
-        <div>
-{/* Material Editing Section (dynamically render for each model) */}
-{models.map((model, modelIndex) => (
-          <div key={modelIndex}>
-            <h3>Material for Model {modelIndex + 1}</h3>
-
-            {/* Ambient Reflectivity (Ka) */}
-            <div>
-              <label>Ka (R, G, B):</label>
-              <input type="number" min="0" max="1" step="0.1"
-                     value={materials[modelIndex].Ka.r}
-                     onChange={(e) => handleMaterialChange(modelIndex, 'Ka', 'r', parseFloat(e.target.value))} />
-              <input type="number" min="0" max="1" step="0.1"
-                     value={materials[modelIndex].Ka.g}
-                     onChange={(e) => handleMaterialChange(modelIndex, 'Ka', 'g', parseFloat(e.target.value))} />
-              <input type="number" min="0" max="1" step="0.1"
-                     value={materials[modelIndex].Ka.b}
-                     onChange={(e) => handleMaterialChange(modelIndex, 'Ka', 'b', parseFloat(e.target.value))} />
-            </div>
-
-            {/* Diffuse Reflectivity (Kd) */}
-            <div>
-              <label>Kd (R, G, B):</label>
-              <input type="number" min="0" max="1" step="0.1"
-                     value={materials[modelIndex].Kd.r}
-                     onChange={(e) => handleMaterialChange(modelIndex, 'Kd', 'r', parseFloat(e.target.value))} />
-              <input type="number" min="0" max="1" step="0.1"
-                     value={materials[modelIndex].Kd.g}
-                     onChange={(e) => handleMaterialChange(modelIndex, 'Kd', 'g', parseFloat(e.target.value))} />
-              <input type="number" min="0" max="1" step="0.1"
-                     value={materials[modelIndex].Kd.b}
-                     onChange={(e) => handleMaterialChange(modelIndex, 'Kd', 'b', parseFloat(e.target.value))} />
-            </div>
-
-            {/* Specular Reflectivity (Ks) */}
-            <div>
-              <label>Ks (R, G, B):</label>
-              <input type="number" min="0" max="1" step="0.1"
-                     value={materials[modelIndex].Ks.r}
-                     onChange={(e) => handleMaterialChange(modelIndex, 'Ks', 'r', parseFloat(e.target.value))} />
-              <input type="number" min="0" max="1" step="0.1"
-                     value={materials[modelIndex].Ks.g}
-                     onChange={(e) => handleMaterialChange(modelIndex, 'Ks', 'g', parseFloat(e.target.value))} />
-              <input type="number" min="0" max="1" step="0.1"
-                     value={materials[modelIndex].Ks.b}
-                     onChange={(e) => handleMaterialChange(modelIndex, 'Ks', 'b', parseFloat(e.target.value))} />
-            </div>
-
-            {/* Shininess (n) */}
-            <div>
-              <label>Shininess:</label>
-              <input type="number" min="1" max="128"
-                     value={materials[modelIndex].shininess}
-                     onChange={(e) => handleMaterialChange(modelIndex, 'shininess', null, parseInt(e.target.value))} />
-            </div>
-
-          </div>
-        ))}
-        </div>
-
+        <Sidebar
+          transform={transform} dispatchTransform={dispatchTransform}
+          VRP={VRP} setVRP={setVRP} focalPoint={focalPoint} setFocalPoint={setFocalPoint}
+          distance={distance} setDistance={setDistance} viewUp={viewUp} setViewUp={setViewUp}
+          window={window} handleWindowChange={handleWindowChange}
+          viewport={viewport} handleViewportChange={handleViewportChange}
+          lightSource={lightSource} setLightSource={setLightSource}
+          ambientLight={ambientLight} setAmbientLight={setAmbientLight}
+          materials={materials} handleMaterialChange={handleMaterialChange}
+          models={models} selectedModelIndex={selectedModelIndex}
+          handleColorChange={handleColorChange}
+          handleVector3Change={handleVector3Change}
+          defaultMaterial={defaultMaterial}
+        />
       </div>
       <div className="main">
-        <canvas ref={canvas3DRef} width={viewport.u.max} height={viewport.v.max} style={{ border: '1px solid black' }} />
+        <canvas ref={canvas3DRef} width={viewport.u.max} height={viewport.v.max} />
       </div>
     </div>
   );

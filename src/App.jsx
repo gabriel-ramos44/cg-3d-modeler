@@ -11,7 +11,7 @@ function App() {
   return (
     <div className="App">
       <header className="App-header">
-        <p>3D Modeler</p>
+        <h2>3D Modeler</h2>
       </header>
 
         <Canvas />
