@@ -48,10 +48,10 @@ const transformReducer = (state, action) => {
 };
 
 const defaultMaterial = {
-  Ka: { r: 0.2, g: 0.2, b: 0.2 },
-  Kd: { r: 0.8, g: 0.8, b: 0.8 },
-  Ks: { r: 0.5, g: 0.5, b: 0.5 },
-  shininess: 5
+  Ka: { r: 0.8, g: 0.4, b: 0.4 },
+  Kd: { r: 0.4, g: 0.8, b: 0.8 },
+  Ks: { r: 0.4, g: 0.4, b: 0.8 },
+  shininess: 2
 };
 
 const Canvas = () => {
@@ -72,11 +72,11 @@ const Canvas = () => {
 
   const [lightSource, setLightSource] = useState({
     position: { x: 100, y: 100, z: 700 },
-    intensity: { r: 100, g: 25, b: 25 }
+    intensity: { r: 128, g: 128, b: 128 }
   });
 
   const [ambientLight, setAmbientLight] = useState({
-    intensity: { r: 50, g: 50, b: 50 }
+    intensity: { r: 25, g: 25, b: 35 }
   });
 
   const [materials, setMaterials] = useState([]);
@@ -227,7 +227,7 @@ const Canvas = () => {
 
   useEffect(() => {
     drawScene(models);
-  }, [models, projectionType, renderMode]);
+  }, [models, projectionType, renderMode, transformationMatrix]);
 
   const handleModelSelect = (index) => {
     setSelectedModelIndex(index);
