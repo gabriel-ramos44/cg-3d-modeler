@@ -12,8 +12,8 @@ An elementary 3D modeler, where object modeling is performed using the revolutio
 
 - [x] Display the 3D object using constant shading, incorporating surface occlusion (including the z-buffer algorithm).
 
-- [ ] Present the 3D object using Gouraud shading, again with surface occlusion (including the z-buffer algorithm).
+- [x] Present the 3D object using Gouraud shading, again with surface occlusion (including the z-buffer algorithm).
 
-- [ ] Showcase the 3D object using simplified Phong shading, while still considering surface occlusion (including the z-buffer algorithm).
+- [x] Showcase the 3D object using simplified Phong shading, while still considering surface occlusion (including the z-buffer algorithm).
 
-- [ ] Ensure that all parameters related to camera settings, window configuration, viewport, lights, and materials composing the objects are editable by the software user during runtime.
+- [x] Ensure that all parameters related to camera settings, window configuration, viewport, lights, and materials composing the objects are editable by the software user during runtime.
