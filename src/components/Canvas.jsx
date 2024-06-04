@@ -389,14 +389,7 @@ const Canvas = () => {
     faces.forEach(face => {
         const [p0, p1, p2] = face.vertices;
           if (renderMode === 'wireframe') {
-          ctx.strokeStyle = `rgb(0, 50, 255)`;
-          ctx.fillStyle = `rgb(255, 255, 255, 0)`;
-          ctx.beginPath();
-          ctx.moveTo(p0.x, p0.y);
-          ctx.lineTo(p1.x, p1.y);
-          ctx.lineTo(p2.x, p2.y);
-          ctx.closePath();
-          ctx.stroke();
+            renderWireframe(ctx, face)
         }
         else if (renderMode === 'constant') {
           const color = calculateFlatShading(face, lightSource, ambientLight, materials[modelIndex]);
@@ -452,6 +445,18 @@ const Canvas = () => {
         )
         }
     });
+};
+
+const renderWireframe = (ctx, face) => {
+  const [p0, p1, p2] = face.vertices;
+  ctx.strokeStyle = `rgb(0, 50, 255)`;
+  ctx.fillStyle = `rgb(255, 255, 255, 0)`;
+  ctx.beginPath();
+  ctx.moveTo(p0.x, p0.y);
+  ctx.lineTo(p1.x, p1.y);
+  ctx.lineTo(p2.x, p2.y);
+  ctx.closePath();
+  ctx.stroke();
 };
 
 const drawPolygonWithNormalInterpolation = (ctx, p0, p1, p2, n0, n1, n2, zBuffer, modelIndex) => {

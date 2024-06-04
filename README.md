@@ -1,6 +1,7 @@
 # Computer graphics
 
-An elementary 3D modeler, where object modeling is performed using the revolution technique.
+An elementary 3D modeler, where object modeling is performed using the revolution technique and rendered following Computer Graphics class pipeline.
+Test it [Here!](https://gabriel-ramos44.github.io/cg-3d-modeler/)
 
 ## To do
 
