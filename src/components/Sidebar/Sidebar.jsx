@@ -43,79 +43,8 @@ const Sidebar = ({
         {/* --- Transformations Tab --- */}
         {activeTab === 'transformations' && (
           <div className="transformations">
-            <h3>Transformations</h3>
-            <div>
-              <label>Translate X:</label>
-              <input
-                type="range"
-                min="-100"
-                max="100"
-                value={transform.translate.x}
-                onChange={(e) => dispatchTransform({ type: 'translateX', value: parseInt(e.target.value) })}
-              />
-              <span>{transform.translate.x}</span>
-            </div>
-            <div>
-              <label>Translate Y:</label>
-              <input
-                type="range"
-                min="-100"
-                max="100"
-                value={transform.translate.y}
-                onChange={(e) => dispatchTransform({ type: 'translateY', value: parseInt(e.target.value) })}
-              />
-              <span>{transform.translate.y}</span>
-            </div>
-            <div>
-              <label>Translate Z:</label>
-              <input
-                type="range"
-                min="-100"
-                max="100"
-                value={transform.translate.z}
-                onChange={(e) => dispatchTransform({ type: 'translateZ', value: parseInt(e.target.value) })}
-              />
-              <span>{transform.translate.z}</span>
-              <input
-                type="number"
-                value={transform.translate.z}
-                onChange={(e) => dispatchTransform({ type: 'translateZ', value: parseInt(e.target.value) })}
-              />
-            </div>
-            <div>
-              <label>Rotate X:</label>
-              <input
-                type="range"
-                min="-180"
-                max="180"
-                value={transform.rotate.x}
-                onChange={(e) => dispatchTransform({ type: 'rotateX', value: parseInt(e.target.value) })}
-              />
-              <span>{transform.rotate.x}º</span>
-            </div>
-            <div>
-              <label>Rotate Y:</label>
-              <input
-                type="range"
-                min="-180"
-                max="180"
-                value={transform.rotate.y}
-                onChange={(e) => dispatchTransform({ type: 'rotateY', value: parseInt(e.target.value) })}
-              />
-              <span>{transform.rotate.y}º</span>
-            </div>
-            <div>
-              <label>Rotate Z:</label>
-              <input
-                type="range"
-                min="-180"
-                max="180"
-                value={transform.rotate.z}
-                onChange={(e) => dispatchTransform({ type: 'rotateZ', value: parseInt(e.target.value) })}
-              />
-              <span>{transform.rotate.z}º</span>
-            </div>
-            <div>
+            <h2>Transformations</h2>
+            <div className="input-group">
               <label>Scale:</label>
               <input
                 type="range"
@@ -126,6 +55,74 @@ const Sidebar = ({
                 onChange={(e) => dispatchTransform({ type: 'scale', value: parseFloat(e.target.value) })}
               />
               <span>{transform.scale}x</span>
+            </div>
+            <h3>Translate</h3>
+            <div className="input-group">
+              <label>X:</label>
+              <input
+                type="range"
+                min="-100"
+                max="100"
+                value={transform.translate.x}
+                onChange={(e) => dispatchTransform({ type: 'translateX', value: parseInt(e.target.value) })}
+              />
+              <span>{transform.translate.x}</span>
+            </div>
+            <div className="input-group">
+              <label>Y:</label>
+              <input
+                type="range"
+                min="-100"
+                max="100"
+                value={transform.translate.y}
+                onChange={(e) => dispatchTransform({ type: 'translateY', value: parseInt(e.target.value) })}
+              />
+              <span>{transform.translate.y}</span>
+            </div>
+            <div className="input-group">
+              <label>Z:</label>
+              <input
+                type="range"
+                min="-100"
+                max="100"
+                value={transform.translate.z}
+                onChange={(e) => dispatchTransform({ type: 'translateZ', value: parseInt(e.target.value) })}
+              />
+              <span>{transform.translate.z}</span>
+            </div>
+            <h3>Rotate</h3>
+            <div className="input-group">
+              <label>X:</label>
+              <input
+                type="range"
+                min="-180"
+                max="180"
+                value={transform.rotate.x}
+                onChange={(e) => dispatchTransform({ type: 'rotateX', value: parseInt(e.target.value) })}
+              />
+              <span>{transform.rotate.x}º</span>
+            </div>
+            <div className="input-group">
+              <label>Y:</label>
+              <input
+                type="range"
+                min="-180"
+                max="180"
+                value={transform.rotate.y}
+                onChange={(e) => dispatchTransform({ type: 'rotateY', value: parseInt(e.target.value) })}
+              />
+              <span>{transform.rotate.y}º</span>
+            </div>
+            <div className="input-group">
+              <label>Z:</label>
+              <input
+                type="range"
+                min="-180"
+                max="180"
+                value={transform.rotate.z}
+                onChange={(e) => dispatchTransform({ type: 'rotateZ', value: parseInt(e.target.value) })}
+              />
+              <span>{transform.rotate.z}º</span>
             </div>
           </div>
         )}
